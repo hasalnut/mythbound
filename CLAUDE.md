@@ -5,7 +5,7 @@ A free 3D fantasy action RPG with creature taming, built by one developer **on R
 ## Status (15 November 2026)
 
 - The place is published to Roblox (place 107679241076160) and edited in Studio; scripts changed there are copied back to `src/`.
-- Slices 1–3 (quest loop with XP, levels and saving; class skills and mana; items, inventory, gathering and crafting) are built and pass solo play tests, including leaving and rejoining. Still open: the 2+ player co-op checks for Slices 0–3, and the friend play-test (see `docs/roadmap.md`).
+- Slices 1–3 (quest loop with XP, levels and saving; class skills and mana; items, inventory, gathering and crafting) are built and pass solo play tests, including leaving and rejoining. The 3-player co-op checks passed on 15 November (pack targeting, no friendly fire, shared XP, quest credit and loot, ally heals, Taunt). Still open: the friend play-test (see `docs/roadmap.md`).
 - Next is Slice 4 (taming and companions). The developer plans to use Claude Fable for it.
 - The earlier Godot 4.7 version of Phase 1 is kept on the Git branch `phase-1` for reference. It was tested and works; it is no longer the main line.
 
@@ -131,7 +131,7 @@ File names: `Name.server.luau` = Script, `Name.client.luau` = LocalScript, `Name
 
 - Claude edits scripts in Studio through Roblox Studio's built-in MCP server. To bring them back into Git: File > Download a Copy (`.rbxl`), then extract every Script, LocalScript and ModuleScript into `src/` (Claude can do this and push), or copy the changed scripts by hand. Rebuilding `Mythbound.rbxlx` with `python3 tools/build_place.py` or syncing with Rojo still works for changes made in `src/`.
 - To connect: in Studio open **Assistant > … > Manage MCP Servers**, switch on **Enable Studio as MCP server**, then use **Quick connect** for Claude Desktop or Claude Code. With that, Claude can read the place, run Luau and start play tests.
-- Studio's MCP server starts solo play tests only. Multi-player tests are Test > Start Test Session > Server and Clients; the clients only connect when Studio is on screen, so the developer starts them, then Claude can inspect the session as a second Studio instance.
+- Studio's MCP server starts solo play tests only. Multi-player tests: the developer picks "Server & Clients" in the drop-down next to Play, sets the player count beside it (it starts at 0, which runs a server only) and presses Play with Studio on screen. Each client and the server then show up as separate Studio instances that Claude can drive.
 - Studio's simulated input can't move the mouse or act as a controller, so mouse-look turning and controller navigation are checked by hand.
 - Without Studio access, say clearly that code is untested, and list what the developer should check.
 - Save the place in Studio (File > Save to Roblox) at the end of each session.
@@ -140,10 +140,9 @@ File names: `Name.server.luau` = Script, `Name.client.luau` = LocalScript, `Name
 
 The full plan is `docs/roadmap.md`.
 
-1. **Co-op checks with 2–3 players** (Test > Start Test Session > Server and Clients, Studio on screen): wolves pick between players; no friendly fire; kill XP, quest credit and loot reach everyone who hit a wolf, and each player's quest and drops are their own; Healing Light and Holy Nova heal allies; Taunt pulls wolves off a friend.
-2. **Friend play-test:** set Server Size to 8 (File > Experience Settings > Places), invite a friend.
-3. **Controller check:** D-pad navigation on the class screen and in the bag, once a controller is available.
-4. **Slice 4: taming and companions** (planned for Claude Fable): foxes, the trust meter, companion AI, knocked out instead of killed, companion limits, the Beast Tamer's Tame Beast and Call of the Wild (currently stubs in `SkillData`), and saving companions.
+1. **Friend play-test:** set Server Size to 8 (File > Experience Settings > Places), invite a friend.
+2. **Controller check:** D-pad navigation on the class screen and in the bag, once a controller is available.
+3. **Slice 4: taming and companions** (planned for Claude Fable): foxes, the trust meter, companion AI, knocked out instead of killed, companion limits, the Beast Tamer's Tame Beast and Call of the Wild (currently stubs in `SkillData`), and saving companions.
 
 ## Workflow
 

@@ -25,7 +25,7 @@ Goal: the starter is solid enough to build on.
 - [x] Run through the checklist in `CLAUDE.md` > Next tasks for all 5 classes, and fix what's wrong.
 - [x] Mouse-look toggle that doesn't need right-drag (for trackpads), plus keyboard camera turning.
 - [x] Swappable assets: add `ServerStorage/Assets` and an `Assets.place(name, cframe)` helper that clones a model from there if it exists, otherwise builds the grey version from code. Use it for houses, trees, rocks, the well, the campfire and creatures, so art can be swapped later without code changes (see `docs/art-direction.md`).
-- [ ] Co-op test with 3 players: wolves pick between players; no friendly fire.
+- [x] Co-op test with 3 players: wolves pick between players; no friendly fire. (Done 15 November.)
 - [ ] Publish privately, set server size to 8, and play once with a friend.
 
 Done when: a friend can join, pick a class, fight wolves with you and talk to the Elder, with no errors in the output log.
@@ -39,9 +39,9 @@ Goal: the core loop of talk → fight → return → reward → progress saved.
 - [x] Quest tracker UI (top right) and a "!" or "?" marker over the Elder.
 - [x] XP and levels: XP from kills (shared by everyone who damaged the creature), level-up toast and effect; health and attack scale with level (formulas in `docs/game-data.md`).
 - [x] Saving with DataStores: class, level, XP and quest state per player, with a `version` field. Load on join, save on leave and every few minutes.
-- [ ] Co-op check (2+ players): kill XP and quest credit reach everyone who hit the wolf; each player's quest is separate.
+- [x] Co-op check (2+ players): kill XP and quest credit reach everyone who hit the wolf; each player's quest is separate. (3 players, 15 November.)
 
-Done when: a new player finishes the quest, levels up, leaves, rejoins, and still has the level and the finished quest. (Solo: done 15 November.)
+Done when: a new player finishes the quest, levels up, leaves, rejoins, and still has the level and the finished quest. Done 15 November (solo and 3-player co-op).
 
 ## Slice 2: Class skills
 
@@ -51,22 +51,22 @@ Goal: classes feel different.
 - [x] Skill 1 (Q) for every class, from `docs/game-data.md`: Ninja Vanish, Tank Taunt, Mage Fireball, Priest Healing Light, Beast Tamer Tame Beast (stub until Slice 4).
 - [x] Cooldown icons on the HUD; touch buttons for phones.
 - [x] Skill 2 (E) for every class: Shuriken Fan, Shield Slam, Frost Nova, Holy Nova, Call of the Wild (stub until Slice 4: it buffs companions).
-- [ ] Healing affects allies in range (co-op); taunt pulls aggro from allies. Built; needs the 2-player test.
+- [x] Healing affects allies in range (co-op); taunt pulls aggro from allies. (3 players, 15 November.)
 
-Done when: each class has 2 skills that work in co-op and show on the HUD. (Solo: done 15 November, except the Beast Tamer, whose skills need companions.)
+Done when: each class has 2 skills that work in co-op and show on the HUD. Done 15 November, except the Beast Tamer, whose skills need companions (Slice 4).
 
 ## Slice 3: Items, inventory and crafting
 
 Goal: things to pick up, carry and make.
 
 - [x] Item data (`ItemData.luau`) and per-player inventory, saved.
-- [x] Creatures drop loot (Meat from wolves and boars); pick up by walking over it. In co-op, each player gets their own drops (built; needs the 2-player test).
+- [x] Creatures drop loot (Meat from wolves and boars); pick up by walking over it. In co-op, each player gets their own drops (checked with 3 players).
 - [x] Gather Wheat from the field and Honey from the beehives (ProximityPrompt). Apples from the village apple trees too (the potion needs them).
 - [x] Inventory screen (Tab, controller D-pad up), usable with mouse, controller and touch.
 - [x] Workbench crafting: Cookie = Wheat + Honey; Health Potion recipe.
 - [x] Use a potion (H, controller D-pad down). The Elder gives 3 potions with the first quest.
 
-Done when: you can hunt, gather, craft a cookie and a potion, drink the potion, and keep everything after rejoining. (Solo: done 15 November.)
+Done when: you can hunt, gather, craft a cookie and a potion, drink the potion, and keep everything after rejoining. Done 15 November (solo and 3-player co-op).
 
 ## Slice 4: Taming and companions
 
