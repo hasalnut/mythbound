@@ -2,6 +2,9 @@
 -- Anything that can be hit is a Model tagged "Damageable" with a Humanoid and these attributes:
 --   HitRadius (studs), HitHeight (studs above the root), Hostile (bool), Void (bool),
 --   DamageReduction (0-1), Invulnerable (bool, set during a dash)
+-- Companions are not tagged, so players can't hit, lock on to or auto-aim at them; creatures
+-- bite them through Combat.damage like anything else. A model with the NeverDies attribute
+-- (companions) stops at 1 health instead of dying.
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
@@ -21,8 +24,12 @@ local TAG = Config.TAG_DAMAGEABLE
 local damageNumberEvent = Net.event("DamageNumber")
 local effectEvent = Net.event("Effect")
 
-type HitHandler = (source: Instance?) -> ()
+type HitHandler = (source: Instance?, via: Model?) -> ()
 local hitHandlers: { [Model]: HitHandler } = {}
+type DamageListener = (model: Model, source: Instance?, via: Model?, dealt: number) -> ()
+local damageListeners: { DamageListener } = {}
+type ActionListener = (player: Player, kind: string, position: Vector3) -> ()
+local actionListeners: { ActionListener } = {}
 
 type Projectile = {
 	position: Vector3,
@@ -100,7 +107,9 @@ function Combat.rollDamage(base: number): (number, boolean)
 end
 
 -- Deals damage after damage reduction. `source` is the attacking Player or creature Model.
-function Combat.damage(model: Model, amount: number, source: Instance?, crit: boolean?): number
+-- When a player's companion does the biting, `source` is the player (who gets the credit) and
+-- `via` is the companion's model.
+function Combat.damage(model: Model, amount: number, source: Instance?, crit: boolean?, via: Model?): number
 	if not Combat.isAlive(model) then
 		return 0
 	end
@@ -110,24 +119,52 @@ function Combat.damage(model: Model, amount: number, source: Instance?, crit: bo
 	local humanoid = model:FindFirstChildOfClass("Humanoid") :: Humanoid
 	local reduction = (model:GetAttribute("DamageReduction") :: number?) or 0
 	local dealt = math.max(1, math.floor(amount * (1 - reduction) + 0.5))
-	humanoid.Health = math.max(0, humanoid.Health - dealt)
+	local floor = if model:GetAttribute("NeverDies") then 1 else 0 -- companions are knocked out, not killed
+	humanoid.Health = math.max(floor, humanoid.Health - dealt)
 
-	local isPlayer = Players:GetPlayerFromCharacter(model) ~= nil
+	local friendly = Players:GetPlayerFromCharacter(model) ~= nil or model:GetAttribute("NeverDies") == true
 	local root = Combat.rootOf(model)
 	if root then
 		local height = (model:GetAttribute("HitHeight") :: number?) or 4
-		local kind = if isPlayer then "hurt" elseif crit then "crit" else "normal"
-		local attacker = if source and source:IsA("Player") then source else nil
+		local kind = if friendly then "hurt" elseif crit then "crit" else "normal"
+		-- `attacker` moves that player's target frame; a companion's bites don't.
+		local attacker = if source and source:IsA("Player") and not via then source else nil
 		damageNumberEvent:FireAllClients(model, root.Position + Vector3.new(0, height, 0), dealt, kind, attacker)
 	end
-	if not isPlayer then
+	if not friendly then
 		Combat.flash(model)
 	end
 	local handler = hitHandlers[model]
 	if handler then
-		task.spawn(handler, source)
+		task.spawn(handler, source, via)
+	end
+	for _, listener in damageListeners do
+		task.spawn(listener, model, source, via, dealt)
 	end
 	return dealt
+end
+
+-- Runs `listener(model, source, via, dealt)` after every hit (Companions picks targets from it,
+-- Taming notices when a creature being fed is hurt).
+function Combat.onDamage(listener: DamageListener)
+	table.insert(damageListeners, listener)
+end
+
+-- Runs `listener(player, kind, position)` when a player attacks, dashes or uses a skill
+-- (`kind` is "attack", "dash" or "skill"). Sudden moves like these startle creatures.
+function Combat.onAction(listener: ActionListener)
+	table.insert(actionListeners, listener)
+end
+
+function Combat.noteAction(player: Player, kind: string)
+	local character = player.Character
+	local root = character and Combat.rootOf(character)
+	if not root then
+		return
+	end
+	for _, listener in actionListeners do
+		task.spawn(listener, player, kind, root.Position)
+	end
 end
 
 function Combat.targets(): { Model }
@@ -257,6 +294,7 @@ local function onAttack(player: Player, aim: any, locked: any)
 		end
 	end
 
+	Combat.noteAction(player, "attack")
 	local attack = Progression.attack(info.attack, (player:GetAttribute("Level") :: number?) or 1)
 	if info.style == "Melee" then
 		melee(player, root, direction, info, attack)
@@ -275,6 +313,7 @@ local function onDash(player: Player)
 		return
 	end
 	lastDash[player] = now
+	Combat.noteAction(player, "dash")
 	character:SetAttribute("Invulnerable", true)
 	task.delay(Config.DASH_IFRAMES, function()
 		if character.Parent then
@@ -301,8 +340,8 @@ local function stepProjectiles(dt: number)
 	if #projectiles == 0 then
 		return
 	end
-	-- Projectiles pass through every player (no friendly fire).
-	local exclude: { Instance } = {}
+	-- Projectiles pass through every player and companion (no friendly fire).
+	local exclude: { Instance } = { workspace:FindFirstChild("Companions") }
 	for _, other in Players:GetPlayers() do
 		if other.Character then
 			table.insert(exclude, other.Character)
@@ -370,6 +409,11 @@ function Combat.burst(position: Vector3, radius: number, color: Color3)
 	effectEvent:FireAllClients("burst", position, radius, color)
 end
 
+-- A small puff of sparks that every player sees (feeding a creature, a failed taming).
+function Combat.spark(position: Vector3, color: Color3)
+	effectEvent:FireAllClients("spark", position, color)
+end
+
 -- Damages everything within `radius` of `position`, with the burst effect.
 function Combat.explode(shooter: Player, position: Vector3, radius: number, damage: number, crit: boolean, voidMultiplier: number, color: Color3?)
 	for _, model in Combat.targetsNear(position, radius) do
@@ -406,7 +450,7 @@ function Combat.fireProjectile(shooter: Player, start: Vector3, velocity: Vector
 	effectEvent:FireAllClients("bolt", start, velocity, options.color, Config.PROJECTILE_LIFETIME, options.arrow == true, shooter.Character, options.size)
 end
 
--- Heals a player character and shows a green number. Returns how much was healed.
+-- Heals a player character or a companion and shows a green number. Returns how much was healed.
 function Combat.heal(character: Model, amount: number): number
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	local root = Combat.rootOf(character)

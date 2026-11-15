@@ -233,6 +233,10 @@ function Effects.bolt(start: Vector3, velocity: Vector3, color: Color3, lifetime
 	if shooter then
 		table.insert(exclude, shooter)
 	end
+	local companions = workspace:FindFirstChild("Companions")
+	if companions then
+		table.insert(exclude, companions) -- bolts pass through companions, as on the server
+	end
 	params.FilterDescendantsInstances = exclude
 
 	local position = start

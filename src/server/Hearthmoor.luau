@@ -570,6 +570,9 @@ local function buildCreatures()
 	Creature.spawner(CreatureData.creatures.wolf, v2(-72, -40), 3, 40)
 	Creature.spawner(CreatureData.creatures.wolf, v2(74, -30), 3, 40)
 	Creature.spawner(CreatureData.creatures.boar, v2(-55, 70), 3, 45)
+	-- Foxes in the south meadow, one group each side of the pond path, well away from the wolves.
+	Creature.spawner(CreatureData.creatures.fox, v2(-12, 88), 3, 45)
+	Creature.spawner(CreatureData.creatures.fox, v2(62, 52), 3, 45)
 end
 
 function Hearthmoor.build()

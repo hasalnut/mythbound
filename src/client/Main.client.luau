@@ -1,4 +1,4 @@
--- Client entry point: class select, HUD, controls and effects.
+-- Client entry point: class select, HUD, controls, effects, the bag and the companion panel.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -6,6 +6,7 @@ local StarterGui = game:GetService("StarterGui")
 
 local Net = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Net"))
 local ClassSelect = require(script.Parent:WaitForChild("ClassSelect"))
+local CompanionPanel = require(script.Parent:WaitForChild("CompanionPanel"))
 local Controls = require(script.Parent:WaitForChild("Controls"))
 local Effects = require(script.Parent:WaitForChild("Effects"))
 local HUD = require(script.Parent:WaitForChild("HUD"))
@@ -33,6 +34,12 @@ QuestTracker.init(HUD.getGui())
 InventoryUI.init(player:WaitForChild("PlayerGui"), function()
 	return player.Character ~= nil and not HUD.isDialogueOpen() and not ClassSelect.isOpen()
 end)
+CompanionPanel.init(player:WaitForChild("PlayerGui"), function()
+	return player.Character ~= nil and not HUD.isDialogueOpen() and not ClassSelect.isOpen()
+end)
+-- Only one panel at a time: opening the bag closes the companion panel and the other way round.
+CompanionPanel.onOpen = InventoryUI.close
+InventoryUI.onOpen = CompanionPanel.close
 HUD.onChangeClass = function()
 	ClassSelect.open()
 end
@@ -46,12 +53,14 @@ ClassSelect.onToggle = function(open: boolean)
 	classScreenOpen = open
 	if open then
 		InventoryUI.close()
+		CompanionPanel.close()
+		HUD.hideTrust()
 	end
 	refreshHUD()
 end
 
 Controls.start(function()
-	return HUD.isDialogueOpen() or ClassSelect.isOpen() or InventoryUI.isOpen()
+	return HUD.isDialogueOpen() or ClassSelect.isOpen() or InventoryUI.isOpen() or CompanionPanel.isOpen()
 end)
 
 local firstSpawn = true
@@ -96,6 +105,8 @@ Net.event("Effect").OnClientEvent:Connect(function(kind: string, ...)
 		Effects.bolt(...)
 	elseif kind == "burst" then
 		Effects.burst(...)
+	elseif kind == "spark" then
+		Effects.spark(...)
 	end
 end)
 
@@ -142,6 +153,27 @@ end)
 
 Net.event("DropTaken").OnClientEvent:Connect(function(id: number)
 	Effects.removeDrop(id)
+end)
+
+Net.event("Companions").OnClientEvent:Connect(function(rows, limit: number, stableSize: number)
+	CompanionPanel.setRoster(rows, limit, stableSize)
+end)
+
+-- The trust meter while feeding a creature: "progress" (detail = feeds left), "tamed"
+-- (detail = the creature's name) or "failed" (detail = why, or "" to say nothing).
+Net.event("Taming").OnClientEvent:Connect(function(model: Model?, trust: number, state: string, detail: any)
+	if state == "progress" then
+		HUD.setTrust(if model then model.Name else "Creature", trust, detail)
+	elseif state == "tamed" then
+		HUD.hideTrust()
+		HUD.banner(`{detail} tamed!`)
+		HUD.toast(`The {string.lower(detail)} will follow you and fight for you`)
+	else
+		HUD.hideTrust()
+		if typeof(detail) == "string" and detail ~= "" then
+			HUD.toast(detail)
+		end
+	end
 end)
 
 Net.event("QuestUpdate").OnClientEvent:Connect(function(quests)

@@ -1,4 +1,4 @@
--- Each player's saved progress: class, level, XP and quests. Loaded on join, saved on leave,
+-- Each player's saved progress: class, level, XP, quests, items and companions. Loaded on join, saved on leave,
 -- every few minutes and when the server shuts down. One DataStore key per player
 -- ("player_<UserId>"), with a `version` field so old saves can be upgraded.
 --
@@ -14,17 +14,22 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local ClassData = require(Shared:WaitForChild("ClassData"))
+local CompanionData = require(Shared:WaitForChild("CompanionData"))
+local CreatureData = require(Shared:WaitForChild("CreatureData"))
 local Net = require(Shared:WaitForChild("Net"))
 local Progression = require(Shared:WaitForChild("Progression"))
 
 local PlayerData = {}
 
-local SAVE_VERSION = 2 -- 2: added inventory and gifts
+local SAVE_VERSION = 3 -- 2: added inventory and gifts; 3: added companions
 local STORE_NAME = if RunService:IsStudio() then "PlayerData_Studio" else "PlayerData"
 local AUTOSAVE_INTERVAL = 180
 local RETRIES = 3
 
 export type QuestState = { status: string, progress: number } -- status: "active" | "ready" | "done"
+-- A tamed creature. `id` is its CreatureData id; `active` means it is out with the player
+-- (the others wait at home). Health isn't saved: companions come back at full health.
+export type CompanionEntry = { uid: number, id: string, name: string, active: boolean }
 export type Data = {
 	version: number,
 	class: string?,
@@ -33,6 +38,8 @@ export type Data = {
 	quests: { [string]: QuestState },
 	inventory: { [string]: number }, -- item id -> count
 	gifts: { [string]: boolean }, -- one-off gifts already given (e.g. the Elder's potions)
+	companions: { CompanionEntry }, -- shared by all the player's classes
+	nextCompanionUid: number,
 }
 
 local toastEvent = Net.event("Toast")
@@ -61,7 +68,7 @@ local function key(player: Player): string
 end
 
 local function newData(): Data
-	return { version = SAVE_VERSION, class = nil, level = 1, xp = 0, quests = {}, inventory = {}, gifts = {} }
+	return { version = SAVE_VERSION, class = nil, level = 1, xp = 0, quests = {}, inventory = {}, gifts = {}, companions = {}, nextCompanionUid = 1 }
 end
 
 -- Fills in anything missing and upgrades old versions. Add a step here whenever SAVE_VERSION goes up.
@@ -86,6 +93,29 @@ local function migrate(raw: any): Data
 	if data.class ~= nil and not ClassData.get(data.class) then
 		data.class = nil
 	end
+	-- Version 2 saves had no companions. Keep only well-formed entries for creatures that can
+	-- still be tamed, with unique ids, and no more than a player may own.
+	local companions: { CompanionEntry } = {}
+	local seen: { [number]: boolean } = {}
+	local highest = 0
+	if type(data.companions) == "table" then
+		for _, entry: any in data.companions :: any do
+			if #companions >= CompanionData.STABLE_SIZE then
+				break
+			end
+			if type(entry) == "table" and CreatureData.tameable(entry.id) and type(entry.uid) == "number"
+				and entry.uid >= 1 and entry.uid == math.floor(entry.uid) and not seen[entry.uid] then
+				seen[entry.uid] = true
+				highest = math.max(highest, entry.uid)
+				local name = if type(entry.name) == "string" and #entry.name > 0
+					then string.sub(entry.name, 1, CompanionData.MAX_NAME)
+					else CreatureData.creatures[entry.id].name
+				table.insert(companions, { uid = entry.uid, id = entry.id, name = name, active = entry.active == true })
+			end
+		end
+	end
+	data.companions = companions
+	data.nextCompanionUid = math.max(math.floor(tonumber(data.nextCompanionUid) or 1), highest + 1)
 	return data
 end
 

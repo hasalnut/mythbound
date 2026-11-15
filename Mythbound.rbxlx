@@ -1,4 +1,4 @@
-<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX00000001"><Properties><string name="Name">Workspace</string><bool name="StreamingEnabled">false</bool></Properties></Item><Item class="Lighting" referent="RBX00000002"><Properties><string name="Name">Lighting</string><token name="Technology">4</token></Properties></Item><Item class="ReplicatedStorage" referent="RBX0000000C"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX0000000B"><Properties><string name="Name">Shared</string></Properties><Item class="ModuleScript" referent="RBX00000003"><Properties><string name="Name">ClassData</string><ProtectedString name="Source"><![CDATA[-- The five classes. Numbers come from docs/game-data.md, converted to studs
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4"><Item class="Workspace" referent="RBX00000001"><Properties><string name="Name">Workspace</string><bool name="StreamingEnabled">false</bool></Properties></Item><Item class="Lighting" referent="RBX00000002"><Properties><string name="Name">Lighting</string><token name="Technology">4</token></Properties></Item><Item class="ReplicatedStorage" referent="RBX0000000D"><Properties><string name="Name">ReplicatedStorage</string></Properties><Item class="Folder" referent="RBX0000000C"><Properties><string name="Name">Shared</string></Properties><Item class="ModuleScript" referent="RBX00000003"><Properties><string name="Name">ClassData</string><ProtectedString name="Source"><![CDATA[-- The five classes. Numbers come from docs/game-data.md, converted to studs
 -- (ranges and speeds multiplied by about 3.5, walk speeds tuned for Roblox).
 
 export type ClassInfo = {
@@ -155,7 +155,65 @@ function ClassData.get(id: any): ClassInfo?
 end
 
 return ClassData
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000004"><Properties><string name="Name">Config</string><ProtectedString name="Source"><![CDATA[-- Game-wide numbers shared by the server and the client.
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000004"><Properties><string name="Name">CompanionData</string><ProtectedString name="Source"><![CDATA[-- Companions: limits, taming numbers and stat formulas (docs/game-data.md, CLAUDE.md > Taming).
+-- A player owns up to STABLE_SIZE companions (saved in PlayerData.companions) and can have
+-- LIMIT of them out at once, or TAMER_LIMIT as a Beast Tamer.
+
+local CreatureData = require(script.Parent:WaitForChild("CreatureData"))
+
+local CompanionData = {}
+
+CompanionData.STABLE_SIZE = 6 -- companions a player can own
+CompanionData.LIMIT = 1 -- how many can be out at once
+CompanionData.TAMER_LIMIT = 3 -- ... for the Beast Tamer
+CompanionData.TAMER_CLASS = "tamer"
+CompanionData.MAX_NAME = 24
+
+CompanionData.KNOCKOUT_TIME = 30 -- seconds a knocked-out companion takes to recover
+CompanionData.FOCUS_TIME = 8 -- seconds a companion keeps attacking what its owner last hit
+CompanionData.THREAT_TIME = 6 -- ... and what last bit its owner or itself
+
+-- Taming by feeding (the trust meter). Distances in studs.
+CompanionData.FEED_RANGE = 14 -- how close you must be for the Feed prompt
+CompanionData.FEED_GAP = 2 -- seconds between feeds (it is still eating)
+CompanionData.FEED_TIMEOUT = 12 -- it loses interest if not fed again within this
+CompanionData.CALM_RADIUS = 10 -- stepping this far from where you started feeding fails
+CompanionData.STARTLE_RADIUS = 30 -- a dash, attack or skill this close scares passive creatures
+CompanionData.JUMP_SPEED = 25 -- moving upwards faster than this counts as a jump
+CompanionData.WARY_TIME = 8 -- after a failed attempt it won't take food for this long
+
+-- How many companions a class can have out at once.
+function CompanionData.limit(classId: any): number
+	return if classId == CompanionData.TAMER_CLASS then CompanionData.TAMER_LIMIT else CompanionData.LIMIT
+end
+
+-- Whether a class can bring this creature out. Beasts tamed with Tame Beast need a Beast Tamer.
+function CompanionData.canBringOut(classId: any, creatureId: string): boolean
+	local creature = CreatureData.creatures[creatureId]
+	if not creature then
+		return false
+	end
+	return not creature.tamerOnly or classId == CompanionData.TAMER_CLASS
+end
+
+-- Companion HP = creature HP x 1.6 x (1 + 0.1 x (player level - 1)).
+function CompanionData.maxHealth(creature: CreatureData.CreatureInfo, level: number): number
+	return math.floor(creature.maxHealth * 1.6 * (1 + 0.1 * (level - 1)) + 0.5)
+end
+
+-- Companion damage = creature damage (6 if none) x 1.5 x (1 + 0.12 x (player level - 1)),
+-- x 1.25 for a Beast Tamer.
+function CompanionData.damage(creature: CreatureData.CreatureInfo, level: number, classId: any): number
+	local base = if creature.damage > 0 then creature.damage else 6
+	local amount = base * 1.5 * (1 + 0.12 * (level - 1))
+	if classId == CompanionData.TAMER_CLASS then
+		amount *= 1.25
+	end
+	return amount
+end
+
+return CompanionData
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000005"><Properties><string name="Name">Config</string><ProtectedString name="Source"><![CDATA[-- Game-wide numbers shared by the server and the client.
 -- Distances are in studs (1 stud is about 0.28 m; a default character is about 5 studs tall).
 
 local Config = {
@@ -184,7 +242,7 @@ local Config = {
 }
 
 return Config
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000005"><Properties><string name="Name">CreatureData</string><ProtectedString name="Source"><![CDATA[-- Creatures that live around Hearthmoor. Numbers from docs/game-data.md, converted to studs.
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000006"><Properties><string name="Name">CreatureData</string><ProtectedString name="Source"><![CDATA[-- Creatures that live around Hearthmoor. Numbers from docs/game-data.md, converted to studs.
 
 export type CreatureInfo = {
 	id: string,
@@ -205,9 +263,16 @@ export type CreatureInfo = {
 	accent: Color3,
 	respawn: number,
 	isVoid: boolean,
+	fleeRange: number?, -- passive creatures run from players this close (unless calmed by food they like)
+	fleeSpeed: number?, -- how fast it runs away
+	tameFood: string?, -- item id any class can feed it to tame it
+	tameFeeds: number?, -- feeds needed to fill the trust meter
+	tamerOnly: boolean?, -- tamed only with the Beast Tamer's Tame Beast skill; only a Beast Tamer can bring it out
 }
 
 local CreatureData = {}
+
+CreatureData.TAMED_RESPAWN = 60 -- seconds before a tamed creature's place in the wild is refilled
 
 CreatureData.creatures = {
 	wolf = {
@@ -227,8 +292,9 @@ CreatureData.creatures = {
 		scale = 1.1,
 		color = Color3.fromRGB(120, 124, 132),
 		accent = Color3.fromRGB(215, 215, 220),
-		respawn = 20,
+		respawn = 45,
 		isVoid = false,
+		tamerOnly = true,
 	},
 	boar = {
 		id = "boar",
@@ -247,13 +313,44 @@ CreatureData.creatures = {
 		scale = 1.0,
 		color = Color3.fromRGB(105, 72, 48),
 		accent = Color3.fromRGB(235, 225, 205),
-		respawn = 25,
+		respawn = 45,
 		isVoid = false,
+		tamerOnly = true,
+	},
+	fox = {
+		id = "fox",
+		name = "Fox",
+		maxHealth = 30,
+		damage = 6,
+		walkSpeed = 17,
+		behaviour = "Passive",
+		pack = false,
+		aggroRange = 0,
+		attackRange = 5,
+		attackInterval = 1.2,
+		windup = 0.35,
+		leash = 140,
+		xp = 0,
+		scale = 0.7,
+		color = Color3.fromRGB(214, 120, 50),
+		accent = Color3.fromRGB(245, 238, 225),
+		respawn = 45,
+		isVoid = false,
+		fleeRange = 25,
+		fleeSpeed = 24,
+		tameFood = "meat",
+		tameFeeds = 3,
 	},
 } :: { [string]: CreatureInfo }
 
+-- True for creatures that can become companions (by feeding, or with Tame Beast).
+function CreatureData.tameable(id: any): boolean
+	local data = if typeof(id) == "string" then CreatureData.creatures[id] else nil
+	return data ~= nil and (data.tameFood ~= nil or data.tamerOnly == true)
+end
+
 return CreatureData
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000006"><Properties><string name="Name">ItemData</string><ProtectedString name="Source"><![CDATA[-- Items, recipes and where things come from. From docs/game-data.md.
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000007"><Properties><string name="Name">ItemData</string><ProtectedString name="Source"><![CDATA[-- Items, recipes and where things come from. From docs/game-data.md.
 -- Inventories are saved per player (PlayerData.inventory: { [itemId]: count }).
 
 export type Item = {
@@ -321,7 +418,7 @@ function ItemData.recipe(id: any): Recipe?
 end
 
 return ItemData
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000007"><Properties><string name="Name">Net</string><ProtectedString name="Source"><![CDATA[-- All RemoteEvents live in ReplicatedStorage.Remotes. The server creates them; clients wait for them.
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000008"><Properties><string name="Name">Net</string><ProtectedString name="Source"><![CDATA[-- All RemoteEvents live in ReplicatedStorage.Remotes. The server creates them; clients wait for them.
 --
 -- Client -> server:  ChooseClass(classId), Attack(aimDirection, lockedTarget?), Dash(),
 --                    UseSkill(slot, aimDirection, lockedTarget?)
@@ -330,13 +427,20 @@ return ItemData
 --         server -> client Inventory(counts), OpenCrafting(), DropSpawned(id, itemId, count, position), DropTaken(id)
 -- Server -> client:  DamageNumber(model, position, amount, kind, attacker?), Effect(kind, ...),
 --                    Dialogue(speaker, lines), Toast(text), QuestUpdate(quests), LevelUp(player, level)
+-- Companions:  client -> server CompanionSetActive(uid, active), CompanionRelease(uid)
+--              server -> client Companions(list, limit, stableSize) where each list entry is
+--                { uid, id, name, active, allowed, knockedOut (seconds left) }
+--              server -> client Taming(creatureModel?, trust 0-1, state, detail): state is
+--                "progress" (detail = feeds left), "tamed" (detail = name) or "failed" (detail = why)
+--              Feeding itself is a ProximityPrompt, which the server hears directly.
 -- Level, XP, XPNext and SavedClass travel as Player attributes, not events.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local NAMES = { "ChooseClass", "Attack", "Dash", "DamageNumber", "Effect", "Dialogue", "Toast", "QuestUpdate", "LevelUp", "UseSkill", "SkillUsed",
-	"Inventory", "UseItem", "Craft", "OpenCrafting", "DropSpawned", "DropTaken" }
+	"Inventory", "UseItem", "Craft", "OpenCrafting", "DropSpawned", "DropTaken",
+	"Companions", "Taming", "CompanionSetActive", "CompanionRelease" }
 
 local Net = {}
 
@@ -371,7 +475,7 @@ function Net.event(name: string): RemoteEvent
 end
 
 return Net
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000008"><Properties><string name="Name">Progression</string><ProtectedString name="Source"><![CDATA[-- Levels and XP. Formulas from docs/game-data.md. One level per player, shared by every class.
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000009"><Properties><string name="Name">Progression</string><ProtectedString name="Source"><![CDATA[-- Levels and XP. Formulas from docs/game-data.md. One level per player, shared by every class.
 
 local Progression = {}
 
@@ -400,7 +504,7 @@ function Progression.attack(classAttack: number, level: number): number
 end
 
 return Progression
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000009"><Properties><string name="Name">QuestData</string><ProtectedString name="Source"><![CDATA[-- Quests and the people who give them. Progress is per player and saved (see Quests.luau).
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX0000000A"><Properties><string name="Name">QuestData</string><ProtectedString name="Source"><![CDATA[-- Quests and the people who give them. Progress is per player and saved (see Quests.luau).
 -- Objective kinds: "defeat" (target = creature id). Later: "collect" (item id), "reach" (place).
 
 export type Quest = {
@@ -464,9 +568,10 @@ QuestData.quests = {
 } :: { [string]: Quest }
 
 return QuestData
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX0000000A"><Properties><string name="Name">SkillData</string><ProtectedString name="Source"><![CDATA[-- Class skills. Numbers from docs/game-data.md; distances converted to studs (metres x 3.5).
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX0000000B"><Properties><string name="Name">SkillData</string><ProtectedString name="Source"><![CDATA[-- Class skills. Numbers from docs/game-data.md; distances converted to studs (metres x 3.5).
 -- Slot 1 is Q (controller L1), slot 2 is E (controller R1). Skills.luau on the server runs them.
--- `pending` marks a skill that needs a later slice (the Beast Tamer's need companions, Slice 4).
+-- `pending` marks a skill that needs a later slice (none at the moment).
+-- The Beast Tamer's skills are run by Taming.luau (Tame Beast) and Companions.luau (Call of the Wild).
 
 export type Skill = {
 	id: string,
@@ -493,8 +598,12 @@ SkillData.skills = {
 	healing_light = { id = "healing_light", name = "Healing Light", mana = 30, cooldown = 6, healRadius = 70, heal = 0.35, regen = 0.04, regenTime = 5 },
 	holy_nova = { id = "holy_nova", name = "Holy Nova", mana = 30, cooldown = 7, radius = 28, multiplier = 2.2, voidMultiplier = 2, healRadius = 70, heal = 0.10 },
 	-- Beast Tamer
-	tame_beast = { id = "tame_beast", name = "Tame Beast", mana = 20, cooldown = 2, pending = "Tame Beast arrives with taming" },
-	call_of_the_wild = { id = "call_of_the_wild", name = "Call of the Wild", mana = 30, cooldown = 14, pending = "Call of the Wild arrives with companions" },
+	-- Tame Beast: the nearest wolf or boar within `range` below `threshold` health.
+	-- Chance = baseChance + missingBonus x (missing health fraction).
+	tame_beast = { id = "tame_beast", name = "Tame Beast", mana = 20, cooldown = 2, range = 35, threshold = 0.5, baseChance = 0.45, missingBonus = 0.6 },
+	-- Call of the Wild: companions hit harder and run faster for `duration` and are healed;
+	-- a spirit wolf fights beside you for `spiritTime` (it doesn't count towards the limit).
+	call_of_the_wild = { id = "call_of_the_wild", name = "Call of the Wild", mana = 30, cooldown = 14, duration = 8, damageBonus = 0.6, speedBonus = 0.3, heal = 0.3, spirit = "wolf", spiritTime = 12 },
 } :: { [string]: Skill }
 
 -- Each class's skills, in slot order (Q, E).
@@ -513,7 +622,7 @@ function SkillData.forClass(classId: any, slot: number): Skill?
 end
 
 return SkillData
-]]></ProtectedString></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX0000001C"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Folder" referent="RBX0000001B"><Properties><string name="Name">Server</string></Properties><Item class="ModuleScript" referent="RBX0000000D"><Properties><string name="Name">Assets</string><ProtectedString name="Source"><![CDATA[-- Swappable art. The world builder asks for pieces by name. If a finished model with that name
+]]></ProtectedString></Properties></Item></Item></Item><Item class="ServerScriptService" referent="RBX0000001F"><Properties><string name="Name">ServerScriptService</string></Properties><Item class="Folder" referent="RBX0000001E"><Properties><string name="Name">Server</string></Properties><Item class="ModuleScript" referent="RBX0000000E"><Properties><string name="Name">Assets</string><ProtectedString name="Source"><![CDATA[-- Swappable art. The world builder asks for pieces by name. If a finished model with that name
 -- is in ServerStorage.Assets (directly, or inside a zone folder such as Assets/Hearthmoor),
 -- a copy of it is placed; otherwise the grey version is built from code. To change how a
 -- house, tree or creature looks, drop a model with the same name into ServerStorage.Assets.
@@ -614,7 +723,7 @@ function Assets.place(name: string, cframe: CFrame, parent: Instance, build: Bui
 end
 
 return Assets
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX0000000E"><Properties><string name="Name">Build</string><ProtectedString name="Source"><![CDATA[-- Small helpers for building scenery out of anchored parts.
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX0000000F"><Properties><string name="Name">Build</string><ProtectedString name="Source"><![CDATA[-- Small helpers for building scenery out of anchored parts.
 
 local Build = {}
 
@@ -760,10 +869,13 @@ function Build.groundY(x: number, z: number): number
 end
 
 return Build
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX0000000F"><Properties><string name="Name">Combat</string><ProtectedString name="Source"><![CDATA[-- Server-side combat: damage, player attacks (melee arcs and projectiles) and dashes.
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000010"><Properties><string name="Name">Combat</string><ProtectedString name="Source"><![CDATA[-- Server-side combat: damage, player attacks (melee arcs and projectiles) and dashes.
 -- Anything that can be hit is a Model tagged "Damageable" with a Humanoid and these attributes:
 --   HitRadius (studs), HitHeight (studs above the root), Hostile (bool), Void (bool),
 --   DamageReduction (0-1), Invulnerable (bool, set during a dash)
+-- Companions are not tagged, so players can't hit, lock on to or auto-aim at them; creatures
+-- bite them through Combat.damage like anything else. A model with the NeverDies attribute
+-- (companions) stops at 1 health instead of dying.
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
@@ -783,8 +895,12 @@ local TAG = Config.TAG_DAMAGEABLE
 local damageNumberEvent = Net.event("DamageNumber")
 local effectEvent = Net.event("Effect")
 
-type HitHandler = (source: Instance?) -> ()
+type HitHandler = (source: Instance?, via: Model?) -> ()
 local hitHandlers: { [Model]: HitHandler } = {}
+type DamageListener = (model: Model, source: Instance?, via: Model?, dealt: number) -> ()
+local damageListeners: { DamageListener } = {}
+type ActionListener = (player: Player, kind: string, position: Vector3) -> ()
+local actionListeners: { ActionListener } = {}
 
 type Projectile = {
 	position: Vector3,
@@ -862,7 +978,9 @@ function Combat.rollDamage(base: number): (number, boolean)
 end
 
 -- Deals damage after damage reduction. `source` is the attacking Player or creature Model.
-function Combat.damage(model: Model, amount: number, source: Instance?, crit: boolean?): number
+-- When a player's companion does the biting, `source` is the player (who gets the credit) and
+-- `via` is the companion's model.
+function Combat.damage(model: Model, amount: number, source: Instance?, crit: boolean?, via: Model?): number
 	if not Combat.isAlive(model) then
 		return 0
 	end
@@ -872,24 +990,52 @@ function Combat.damage(model: Model, amount: number, source: Instance?, crit: bo
 	local humanoid = model:FindFirstChildOfClass("Humanoid") :: Humanoid
 	local reduction = (model:GetAttribute("DamageReduction") :: number?) or 0
 	local dealt = math.max(1, math.floor(amount * (1 - reduction) + 0.5))
-	humanoid.Health = math.max(0, humanoid.Health - dealt)
+	local floor = if model:GetAttribute("NeverDies") then 1 else 0 -- companions are knocked out, not killed
+	humanoid.Health = math.max(floor, humanoid.Health - dealt)
 
-	local isPlayer = Players:GetPlayerFromCharacter(model) ~= nil
+	local friendly = Players:GetPlayerFromCharacter(model) ~= nil or model:GetAttribute("NeverDies") == true
 	local root = Combat.rootOf(model)
 	if root then
 		local height = (model:GetAttribute("HitHeight") :: number?) or 4
-		local kind = if isPlayer then "hurt" elseif crit then "crit" else "normal"
-		local attacker = if source and source:IsA("Player") then source else nil
+		local kind = if friendly then "hurt" elseif crit then "crit" else "normal"
+		-- `attacker` moves that player's target frame; a companion's bites don't.
+		local attacker = if source and source:IsA("Player") and not via then source else nil
 		damageNumberEvent:FireAllClients(model, root.Position + Vector3.new(0, height, 0), dealt, kind, attacker)
 	end
-	if not isPlayer then
+	if not friendly then
 		Combat.flash(model)
 	end
 	local handler = hitHandlers[model]
 	if handler then
-		task.spawn(handler, source)
+		task.spawn(handler, source, via)
+	end
+	for _, listener in damageListeners do
+		task.spawn(listener, model, source, via, dealt)
 	end
 	return dealt
+end
+
+-- Runs `listener(model, source, via, dealt)` after every hit (Companions picks targets from it,
+-- Taming notices when a creature being fed is hurt).
+function Combat.onDamage(listener: DamageListener)
+	table.insert(damageListeners, listener)
+end
+
+-- Runs `listener(player, kind, position)` when a player attacks, dashes or uses a skill
+-- (`kind` is "attack", "dash" or "skill"). Sudden moves like these startle creatures.
+function Combat.onAction(listener: ActionListener)
+	table.insert(actionListeners, listener)
+end
+
+function Combat.noteAction(player: Player, kind: string)
+	local character = player.Character
+	local root = character and Combat.rootOf(character)
+	if not root then
+		return
+	end
+	for _, listener in actionListeners do
+		task.spawn(listener, player, kind, root.Position)
+	end
 end
 
 function Combat.targets(): { Model }
@@ -1019,6 +1165,7 @@ local function onAttack(player: Player, aim: any, locked: any)
 		end
 	end
 
+	Combat.noteAction(player, "attack")
 	local attack = Progression.attack(info.attack, (player:GetAttribute("Level") :: number?) or 1)
 	if info.style == "Melee" then
 		melee(player, root, direction, info, attack)
@@ -1037,6 +1184,7 @@ local function onDash(player: Player)
 		return
 	end
 	lastDash[player] = now
+	Combat.noteAction(player, "dash")
 	character:SetAttribute("Invulnerable", true)
 	task.delay(Config.DASH_IFRAMES, function()
 		if character.Parent then
@@ -1063,8 +1211,8 @@ local function stepProjectiles(dt: number)
 	if #projectiles == 0 then
 		return
 	end
-	-- Projectiles pass through every player (no friendly fire).
-	local exclude: { Instance } = {}
+	-- Projectiles pass through every player and companion (no friendly fire).
+	local exclude: { Instance } = { workspace:FindFirstChild("Companions") }
 	for _, other in Players:GetPlayers() do
 		if other.Character then
 			table.insert(exclude, other.Character)
@@ -1132,6 +1280,11 @@ function Combat.burst(position: Vector3, radius: number, color: Color3)
 	effectEvent:FireAllClients("burst", position, radius, color)
 end
 
+-- A small puff of sparks that every player sees (feeding a creature, a failed taming).
+function Combat.spark(position: Vector3, color: Color3)
+	effectEvent:FireAllClients("spark", position, color)
+end
+
 -- Damages everything within `radius` of `position`, with the burst effect.
 function Combat.explode(shooter: Player, position: Vector3, radius: number, damage: number, crit: boolean, voidMultiplier: number, color: Color3?)
 	for _, model in Combat.targetsNear(position, radius) do
@@ -1168,7 +1321,7 @@ function Combat.fireProjectile(shooter: Player, start: Vector3, velocity: Vector
 	effectEvent:FireAllClients("bolt", start, velocity, options.color, Config.PROJECTILE_LIFETIME, options.arrow == true, shooter.Character, options.size)
 end
 
--- Heals a player character and shows a green number. Returns how much was healed.
+-- Heals a player character or a companion and shows a green number. Returns how much was healed.
 function Combat.heal(character: Model, amount: number): number
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 	local root = Combat.rootOf(character)
@@ -1195,12 +1348,850 @@ function Combat.start()
 end
 
 return Combat
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000010"><Properties><string name="Name">Creature</string><ProtectedString name="Source"><![CDATA[-- Wild creatures: a low-poly body welded to a Humanoid root, driven by a small state machine.
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000011"><Properties><string name="Name">Companions</string><ProtectedString name="Source"><![CDATA[-- Companions: tamed creatures that follow their owner and fight for them.
+--
+-- Each player's companions are saved in PlayerData.companions (shared by all their classes).
+-- The ones marked `active` are out: they follow the owner, attack whatever the owner last hit
+-- (or whatever is biting the owner or them), and are knocked out instead of killed, getting up
+-- again after CompanionData.KNOCKOUT_TIME. A class can have CompanionData.limit of them out.
+-- A companion's bite is credited to its owner (XP, quest credit, loot).
+--
+-- Their bodies aren't tagged Damageable, so players can't hit or lock on to them, and they don't
+-- collide with players or each other. Everything here runs on the server: clients get the
+-- Companions event (for the panel) and read health from the replicated models, which carry the
+-- attributes OwnerId, CompanionUid, CompanionName, State, KnockedOut and Spirit.
+
+local CollectionService = game:GetService("CollectionService")
+local Debris = game:GetService("Debris")
+local PhysicsService = game:GetService("PhysicsService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local CompanionData = require(Shared:WaitForChild("CompanionData"))
+local Config = require(Shared:WaitForChild("Config"))
+local CreatureData = require(Shared:WaitForChild("CreatureData"))
+local Net = require(Shared:WaitForChild("Net"))
+local Build = require(script.Parent:WaitForChild("Build"))
+local Combat = require(script.Parent:WaitForChild("Combat"))
+local Creature = require(script.Parent:WaitForChild("Creature"))
+local PlayerData = require(script.Parent:WaitForChild("PlayerData"))
+
+local Companions = {}
+
+local THINK_INTERVAL = 0.1
+local SETTLE_TIME = 0.4 -- a new body is held still this long before physics takes over
+local FOLLOW_DISTANCE = 7 -- how far behind the owner a companion waits
+local FOLLOW_SLACK = 3 -- it doesn't shuffle about for less than this
+local TELEPORT_DISTANCE = 90 -- further behind than this, it reappears beside the owner
+local TARGET_RANGE = 80 -- targets further than this from the owner are left alone
+local WINDUP = 0.35 -- seconds between deciding to bite and the bite landing
+local RECOVER = 0.4
+local REGEN = 0.03 -- fraction of max health regained per second out of a fight
+local FALL_LIMIT = -60
+local REQUEST_COOLDOWN = 0.4 -- seconds between panel requests from one player
+local GROUP = "Companions"
+local PLAYER_GROUP = "Players"
+local SLOT_ANGLES = { 155, 205, 180, 120 } -- degrees round from straight ahead: they fan out behind the owner
+local SPIRIT_SLOT = 4
+local SPIRIT_COLOR = Color3.fromRGB(150, 235, 255)
+local TAG = Config.TAG_DAMAGEABLE
+
+type Entry = PlayerData.CompanionEntry
+type Companion = {
+	owner: Player,
+	entry: Entry?, -- nil for the spirit wolf, which isn't saved
+	data: CreatureData.CreatureInfo,
+	name: string,
+	model: Model,
+	humanoid: Humanoid,
+	root: BasePart,
+	state: string, -- "Follow" | "Chase" | "Windup" | "Recover" | "KnockedOut"
+	timer: number,
+	nextAttack: number,
+	target: Model?,
+	threat: Model?, -- the creature that last bit it
+	threatAt: number,
+	settleUntil: number?,
+	koUntil: number,
+	expiresAt: number?, -- the spirit wolf fades at this time
+	moving: boolean, -- walking back to its place behind the owner
+	rootHeight: number, -- how far above the ground its root rides
+	damage: number,
+}
+type Mark = { model: Model, at: number }
+type Buff = { untilTime: number, damage: number, speed: number }
+
+local out: { [Player]: { Companion } } = {}
+local byModel: { [Model]: Companion } = {}
+local focus: { [Player]: Mark } = {} -- what each player last damaged
+local ownerThreat: { [Player]: Mark } = {} -- what last bit each player
+local knockedUntil: { [Player]: { [number]: number } } = {} -- uid -> when it recovers (kept while it is sent home)
+local buffs: { [Player]: Buff } = {} -- Call of the Wild
+local lastRequest: { [Player]: number } = {}
+
+local companionsEvent = Net.event("Companions")
+local toastEvent = Net.event("Toast")
+
+local function getFolder(): Folder
+	return Build.folder("Companions", workspace)
+end
+
+local function flatDistance(a: Vector3, b: Vector3): number
+	return Vector3.new(a.X - b.X, 0, a.Z - b.Z).Magnitude
+end
+
+local function listOf(player: Player): { Companion }
+	local list = out[player]
+	if not list then
+		list = {}
+		out[player] = list
+	end
+	return list
+end
+
+local function knockedOf(player: Player): { [number]: number }
+	local map = knockedUntil[player]
+	if not map then
+		map = {}
+		knockedUntil[player] = map
+	end
+	return map
+end
+
+local function rosterOf(player: Player): { Entry }?
+	local data = PlayerData.get(player)
+	return data and data.companions
+end
+
+-- The owner's living character, its root and its Humanoid (or nils).
+local function ownerParts(player: Player): (Model?, BasePart?, Humanoid?)
+	local character = player.Character
+	if not character or not Combat.isAlive(character) then
+		return nil, nil, nil
+	end
+	return character, Combat.rootOf(character), character:FindFirstChildOfClass("Humanoid")
+end
+
+local function yawOf(cframe: CFrame): number
+	local _, yaw = cframe:ToOrientation()
+	return yaw
+end
+
+-- The point on the ground where companion number `slot` waits: behind the owner, fanned out.
+local function slotPosition(root: BasePart, slot: number): Vector3
+	local angle = SLOT_ANGLES[(slot - 1) % #SLOT_ANGLES + 1]
+	local look = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+	if look.Magnitude < 0.01 then
+		look = Vector3.new(0, 0, -1)
+	end
+	local direction = CFrame.Angles(0, math.rad(angle), 0):VectorToWorldSpace(look.Unit)
+	local point = root.Position + direction * FOLLOW_DISTANCE
+	return Vector3.new(point.X, Build.groundY(point.X, point.Z), point.Z)
+end
+
+local function slotOf(c: Companion): number
+	if not c.entry then
+		return SPIRIT_SLOT
+	end
+	local slot = 0
+	for _, other in listOf(c.owner) do
+		if other.entry then
+			slot += 1
+		end
+		if other == c then
+			break
+		end
+	end
+	return math.max(slot, 1)
+end
+
+-- How many of the player's saved companions are out (the spirit wolf doesn't count).
+local function countOut(player: Player): number
+	local count = 0
+	for _, c in listOf(player) do
+		if c.entry then
+			count += 1
+		end
+	end
+	return count
+end
+
+local function findOut(player: Player, uid: number): Companion?
+	for _, c in listOf(player) do
+		if c.entry and c.entry.uid == uid then
+			return c
+		end
+	end
+	return nil
+end
+
+function Companions.limit(player: Player): number
+	return CompanionData.limit(player:GetAttribute("Class"))
+end
+
+-- Sends the player their list for the companion panel.
+local function send(player: Player)
+	local roster = rosterOf(player)
+	if not roster then
+		return
+	end
+	local now = os.clock()
+	local classId = player:GetAttribute("Class")
+	local knocked = knockedOf(player)
+	local list = {}
+	for _, entry in roster do
+		local recoverAt = knocked[entry.uid]
+		table.insert(list, {
+			uid = entry.uid,
+			id = entry.id,
+			name = entry.name,
+			active = entry.active,
+			allowed = CompanionData.canBringOut(classId, entry.id),
+			knockedOut = if recoverAt and recoverAt > now then math.ceil(recoverAt - now) else 0,
+		})
+	end
+	companionsEvent:FireClient(player, list, CompanionData.limit(classId), CompanionData.STABLE_SIZE)
+end
+
+-- Health and damage follow the owner's level (and class, for the Beast Tamer's bonus).
+local function applyStats(c: Companion, heal: boolean)
+	local level = (c.owner:GetAttribute("Level") :: number?) or 1
+	local maxHealth = CompanionData.maxHealth(c.data, level)
+	c.humanoid.MaxHealth = maxHealth
+	if heal then
+		c.humanoid.Health = maxHealth
+	end
+	c.damage = CompanionData.damage(c.data, level, c.owner:GetAttribute("Class"))
+end
+
+local function despawn(c: Companion, poof: boolean)
+	local list = out[c.owner]
+	local index = list and table.find(list, c)
+	if list and index then
+		table.remove(list, index)
+	end
+	byModel[c.model] = nil
+	if poof and c.root.Parent then
+		Combat.burst(c.root.Position, 5, Color3.fromRGB(200, 230, 255))
+	end
+	c.model:Destroy()
+end
+
+local function despawnAll(player: Player)
+	for _, c in table.clone(listOf(player)) do
+		despawn(c, false)
+	end
+end
+
+-- Stands the companion upright on the ground at `point`, keeping the way it faces.
+local function standAt(c: Companion, point: Vector3)
+	local y = Build.groundY(point.X, point.Z) + c.rootHeight
+	c.model:PivotTo(CFrame.new(point.X, y, point.Z) * CFrame.Angles(0, yawOf(c.root.CFrame), 0))
+	c.root.AssemblyLinearVelocity = Vector3.zero
+end
+
+local function face(c: Companion, position: Vector3)
+	local from = c.root.Position
+	local flatTarget = Vector3.new(position.X, from.Y, position.Z)
+	if (flatTarget - from).Magnitude > 0.1 then
+		c.root.CFrame = CFrame.lookAt(from, flatTarget)
+	end
+end
+
+-- A soft outline for `seconds` (Call of the Wild).
+local function glow(model: Model, seconds: number)
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "WildGlow"
+	highlight.FillTransparency = 1
+	highlight.OutlineColor = Color3.fromRGB(140, 255, 150)
+	highlight.OutlineTransparency = 0.1
+	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
+	highlight.Parent = model
+	Debris:AddItem(highlight, seconds)
+end
+
+-- Knocked out instead of killed: it lies down, can't be hit, and gets up after KNOCKOUT_TIME.
+local function knockOut(c: Companion)
+	if c.state == "KnockedOut" or not byModel[c.model] then
+		return
+	end
+	local entry = c.entry
+	if not entry then
+		despawn(c, true) -- the spirit wolf just fades away
+		return
+	end
+	c.state = "KnockedOut"
+	c.target = nil
+	c.moving = false
+	c.koUntil = os.clock() + CompanionData.KNOCKOUT_TIME
+	knockedOf(c.owner)[entry.uid] = c.koUntil
+	c.model:SetAttribute("KnockedOut", true)
+	c.model:SetAttribute("Invulnerable", true)
+	c.humanoid.DisplayName = `{c.name} (knocked out)`
+	c.settleUntil = nil
+	c.root.Anchored = true
+	-- Lie on its side on the ground.
+	local position = c.root.Position
+	local ground = Build.groundY(position.X, position.Z)
+	c.model:PivotTo(CFrame.new(position.X, ground + c.root.Size.X / 2 + 0.2, position.Z)
+		* CFrame.Angles(0, yawOf(c.root.CFrame), math.rad(90)))
+	toastEvent:FireClient(c.owner, `{c.name} was knocked out. It will recover in {CompanionData.KNOCKOUT_TIME} s`)
+	send(c.owner)
+end
+
+local function recover(c: Companion)
+	c.state = "Follow"
+	c.koUntil = 0
+	if c.entry then
+		knockedOf(c.owner)[c.entry.uid] = nil
+	end
+	c.model:SetAttribute("KnockedOut", nil)
+	c.model:SetAttribute("Invulnerable", nil)
+	c.humanoid.DisplayName = `{c.owner.DisplayName}'s {c.name}`
+	c.humanoid.Health = c.humanoid.MaxHealth
+	local _, ownerRoot = ownerParts(c.owner)
+	local position = c.root.Position
+	if ownerRoot and flatDistance(position, ownerRoot.Position) > TELEPORT_DISTANCE then
+		position = slotPosition(ownerRoot, slotOf(c)) -- the owner moved on: get up beside them
+	end
+	standAt(c, position)
+	c.root.Anchored = false
+	c.root:SetNetworkOwner(nil)
+	toastEvent:FireClient(c.owner, `{c.name} is back on its feet`)
+	send(c.owner)
+end
+
+-- Builds a companion's body standing on `ground`, facing `yaw`.
+local function spawn(player: Player, entry: Entry?, data: CreatureData.CreatureInfo, ground: Vector3, yaw: number?, name: string): Companion
+	local model, humanoid, root = Creature.buildBody(data, ground, getFolder(), false)
+	if yaw then
+		model:PivotTo(CFrame.new(model:GetPivot().Position) * CFrame.Angles(0, yaw, 0))
+	end
+	model.Name = name
+	humanoid.DisplayName = `{player.DisplayName}'s {name}`
+	humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false) -- knocked out, never dead (see think)
+	model:SetAttribute("NeverDies", true)
+	model:SetAttribute("OwnerId", player.UserId)
+	model:SetAttribute("CompanionUid", if entry then entry.uid else 0)
+	model:SetAttribute("CompanionName", name)
+	for _, part in model:GetDescendants() do
+		if part:IsA("BasePart") then
+			part.CollisionGroup = GROUP
+		end
+	end
+	local c: Companion = {
+		owner = player,
+		entry = entry,
+		data = data,
+		name = name,
+		model = model,
+		humanoid = humanoid,
+		root = root,
+		state = "Follow",
+		timer = 0,
+		nextAttack = 0,
+		target = nil,
+		threat = nil,
+		threatAt = 0,
+		settleUntil = os.clock() + SETTLE_TIME,
+		koUntil = 0,
+		expiresAt = nil,
+		moving = false,
+		rootHeight = root.Position.Y - ground.Y,
+		damage = 0,
+	}
+	applyStats(c, true)
+	table.insert(listOf(player), c)
+	byModel[model] = c
+	Combat.onHit(model, function()
+		if humanoid.Health <= 1 then
+			knockOut(c)
+		end
+	end)
+	return c
+end
+
+local function validTarget(model: Model?, ownerPosition: Vector3): boolean
+	if not model or not model.Parent or not Combat.isAlive(model) or not CollectionService:HasTag(model, TAG) then
+		return false
+	end
+	local root = Combat.rootOf(model)
+	return root ~= nil and (root.Position - ownerPosition).Magnitude <= TARGET_RANGE
+end
+
+-- What to attack: whatever the owner last hit, else whatever last bit this companion, else
+-- whatever last bit the owner.
+local function pickTarget(c: Companion, now: number, ownerPosition: Vector3): Model?
+	local mark = focus[c.owner]
+	if mark and now - mark.at <= CompanionData.FOCUS_TIME and validTarget(mark.model, ownerPosition) then
+		return mark.model
+	end
+	if c.threat and now - c.threatAt <= CompanionData.THREAT_TIME and validTarget(c.threat, ownerPosition) then
+		return c.threat
+	end
+	local threat = ownerThreat[c.owner]
+	if threat and now - threat.at <= CompanionData.THREAT_TIME and validTarget(threat.model, ownerPosition) then
+		return threat.model
+	end
+	return nil
+end
+
+local function think(c: Companion, dt: number)
+	local now = os.clock()
+	local settleUntil = c.settleUntil
+	if settleUntil then
+		if now < settleUntil then
+			return
+		end
+		c.settleUntil = nil
+		c.root.Anchored = false
+		c.root:SetNetworkOwner(nil) -- the server moves companions
+	end
+	if c.expiresAt and now >= c.expiresAt then
+		despawn(c, true)
+		return
+	end
+	if c.state == "KnockedOut" then
+		if now >= c.koUntil then
+			recover(c)
+		end
+		return
+	end
+	if c.humanoid.Health <= 1 then
+		knockOut(c) -- safety net: health drained some way other than Combat.damage
+		return
+	end
+	local _, ownerRoot, ownerHumanoid = ownerParts(c.owner)
+	if not ownerRoot or not ownerHumanoid then
+		c.humanoid:MoveTo(c.root.Position) -- the owner is down: wait (their companions are cleared when they fall)
+		return
+	end
+	local position = c.root.Position
+	local ownerPosition = ownerRoot.Position
+	if position.Y < FALL_LIMIT or flatDistance(position, ownerPosition) > TELEPORT_DISTANCE then
+		standAt(c, slotPosition(ownerRoot, slotOf(c)))
+		c.state = "Follow"
+		c.target = nil
+		c.moving = false
+		return
+	end
+
+	local buff = buffs[c.owner]
+	local damageBonus, speedBonus = 1, 1
+	if buff and now < buff.untilTime then
+		damageBonus, speedBonus = buff.damage, buff.speed
+	end
+
+	if c.state == "Follow" or c.state == "Chase" then
+		c.target = pickTarget(c, now, ownerPosition)
+		c.state = if c.target then "Chase" else "Follow"
+	end
+
+	if c.state == "Follow" then
+		if c.humanoid.Health < c.humanoid.MaxHealth then
+			c.humanoid.Health = math.min(c.humanoid.MaxHealth, c.humanoid.Health + c.humanoid.MaxHealth * REGEN * dt)
+		end
+		local toOwner = flatDistance(position, ownerPosition)
+		if toOwner > FOLLOW_DISTANCE + FOLLOW_SLACK + 1 then
+			c.moving = true -- the owner walked off: catch up
+		end
+		if c.moving then
+			local goal = slotPosition(ownerRoot, slotOf(c))
+			if flatDistance(position, goal) <= FOLLOW_SLACK then
+				c.moving = false
+				c.humanoid:MoveTo(position)
+			else
+				local speed = math.max(c.data.walkSpeed, ownerHumanoid.WalkSpeed * 1.1) * speedBonus
+				if toOwner > 30 then
+					speed *= 1.5
+				end
+				c.humanoid.WalkSpeed = speed
+				c.humanoid:MoveTo(goal)
+			end
+		end
+	elseif c.state == "Chase" then
+		local targetRoot = c.target and Combat.rootOf(c.target)
+		if not targetRoot then
+			c.state = "Follow"
+			return
+		end
+		if flatDistance(position, targetRoot.Position) <= c.data.attackRange + 1.5 then
+			c.humanoid:MoveTo(position) -- stop
+			face(c, targetRoot.Position)
+			if now >= c.nextAttack then
+				c.state = "Windup"
+				c.timer = WINDUP
+			end
+		else
+			c.humanoid.WalkSpeed = math.max(c.data.walkSpeed, ownerHumanoid.WalkSpeed) * 1.1 * speedBonus
+			c.humanoid:MoveTo(targetRoot.Position)
+		end
+	elseif c.state == "Windup" then
+		local target = c.target
+		local targetRoot = if target and Combat.isAlive(target) then Combat.rootOf(target) else nil
+		if targetRoot then
+			face(c, targetRoot.Position)
+		end
+		c.timer -= dt
+		if c.timer <= 0 then
+			if target and targetRoot and flatDistance(position, targetRoot.Position) <= c.data.attackRange + 3 then
+				local amount, crit = Combat.rollDamage(c.damage * damageBonus)
+				Combat.damage(target, amount, c.owner, crit, c.model) -- the owner gets the credit
+			end
+			c.nextAttack = now + c.data.attackInterval
+			c.state = "Recover"
+			c.timer = RECOVER
+		end
+	elseif c.state == "Recover" then
+		c.timer -= dt
+		if c.timer <= 0 then
+			c.state = "Chase"
+		end
+	end
+end
+
+-- Brings out the companions marked active, as far as the player's class allows; the rest are
+-- sent home. Called when the character spawns (so also after a class change).
+function Companions.refresh(player: Player)
+	local roster = rosterOf(player)
+	if not roster then
+		return
+	end
+	despawnAll(player)
+	local _, root = ownerParts(player)
+	local classId = player:GetAttribute("Class")
+	local limit = CompanionData.limit(classId)
+	local count = 0
+	local changed = false
+	for _, entry in roster do
+		if entry.active then
+			local data = CreatureData.creatures[entry.id]
+			if data and count < limit and CompanionData.canBringOut(classId, entry.id) then
+				count += 1
+				if root then
+					spawn(player, entry, data, slotPosition(root, count), yawOf(root.CFrame), entry.name)
+				end
+			else
+				entry.active = false
+				changed = true
+			end
+		end
+	end
+	if changed then
+		PlayerData.markDirty(player)
+	end
+	send(player)
+end
+
+-- Whether `player` could take on a newly tamed creature of this kind. Returns false and why not.
+function Companions.canTame(player: Player, data: CreatureData.CreatureInfo): (boolean, string?)
+	local roster = rosterOf(player)
+	if not roster then
+		return false, "Your progress hasn't loaded yet"
+	end
+	if data.tamerOnly and player:GetAttribute("Class") ~= CompanionData.TAMER_CLASS then
+		return false, `Only a Beast Tamer can tame a {string.lower(data.name)}`
+	end
+	if #roster >= CompanionData.STABLE_SIZE then
+		return false, `You already have {CompanionData.STABLE_SIZE} companions. Release one first (P)`
+	end
+	return true, nil
+end
+
+-- Adds a newly tamed creature to the player's companions. It comes out at `position` facing
+-- `yaw` (where the wild creature stood) if there's room; otherwise it waits at home.
+function Companions.add(player: Player, data: CreatureData.CreatureInfo, position: Vector3, yaw: number?): boolean
+	local save = PlayerData.get(player)
+	if not save or not Companions.canTame(player, data) then
+		return false
+	end
+	local entry: Entry = { uid = save.nextCompanionUid, id = data.id, name = data.name, active = false }
+	save.nextCompanionUid += 1
+	table.insert(save.companions, entry)
+	local limit = Companions.limit(player)
+	if countOut(player) < limit and CompanionData.canBringOut(player:GetAttribute("Class"), data.id) and ownerParts(player) then
+		entry.active = true
+		local ground = Vector3.new(position.X, Build.groundY(position.X, position.Z), position.Z)
+		spawn(player, entry, data, ground, yaw, entry.name)
+	else
+		toastEvent:FireClient(player, `{entry.name} is waiting at home: only {limit} can be out. Press P to choose`)
+	end
+	PlayerData.markDirty(player)
+	send(player)
+	task.spawn(PlayerData.save, player) -- a new companion is worth saving straight away
+	return true
+end
+
+-- Living companions (not knocked out) within `radius` of `position`, for heals.
+function Companions.near(position: Vector3, radius: number): { Model }
+	local list = {}
+	for model, c in byModel do
+		if c.state ~= "KnockedOut" and model.Parent and (c.root.Position - position).Magnitude <= radius then
+			table.insert(list, model)
+		end
+	end
+	return list
+end
+
+-- The Beast Tamer's Call of the Wild: the player's companions hit harder and run faster for
+-- `skill.duration` and are healed, and a spirit wolf joins the fight for `skill.spiritTime`.
+function Companions.callOfTheWild(player: Player, skill: { [string]: any }): boolean
+	local _, root = ownerParts(player)
+	if not root then
+		return false
+	end
+	local now = os.clock()
+	buffs[player] = { untilTime = now + skill.duration, damage = 1 + skill.damageBonus, speed = 1 + skill.speedBonus }
+	for _, c in table.clone(listOf(player)) do
+		if not c.entry then
+			despawn(c, false) -- an earlier spirit wolf
+		elseif c.state ~= "KnockedOut" then
+			Combat.heal(c.model, c.humanoid.MaxHealth * skill.heal)
+			glow(c.model, skill.duration)
+		end
+	end
+	local data = CreatureData.creatures[skill.spirit]
+	if data then
+		local spirit = spawn(player, nil, data, slotPosition(root, SPIRIT_SLOT), yawOf(root.CFrame), `Spirit {data.name}`)
+		spirit.expiresAt = now + skill.spiritTime
+		spirit.model:SetAttribute("Spirit", true)
+		for _, part in spirit.model:GetDescendants() do
+			if part:IsA("BasePart") and part ~= spirit.root then
+				part.Material = Enum.Material.Neon
+				part.Color = SPIRIT_COLOR
+				part.Transparency = 0.45
+				part.CastShadow = false
+			end
+		end
+	end
+	Combat.burst(root.Position, 18, Color3.fromRGB(120, 220, 130))
+	return true
+end
+
+-- Panel requests ------------------------------------------------------------------------------
+
+local function tooSoon(player: Player): boolean
+	local now = os.clock()
+	if now - (lastRequest[player] or -100) < REQUEST_COOLDOWN then
+		return true
+	end
+	lastRequest[player] = now
+	return false
+end
+
+local function findEntry(player: Player, uid: any): (Entry?, number?)
+	local roster = rosterOf(player)
+	if not roster or typeof(uid) ~= "number" then
+		return nil, nil
+	end
+	for index, entry in roster do
+		if entry.uid == uid then
+			return entry, index
+		end
+	end
+	return nil, nil
+end
+
+local function onSetActive(player: Player, uid: any, active: any)
+	if typeof(active) ~= "boolean" or tooSoon(player) then
+		return
+	end
+	local entry = findEntry(player, uid)
+	if not entry then
+		return
+	end
+	local current = findOut(player, entry.uid)
+	if active and not current then
+		local _, root = ownerParts(player)
+		local data = CreatureData.creatures[entry.id]
+		local limit = Companions.limit(player)
+		local recoverAt = knockedOf(player)[entry.uid]
+		if not root or not data then
+			return
+		elseif not CompanionData.canBringOut(player:GetAttribute("Class"), entry.id) then
+			toastEvent:FireClient(player, `Only a Beast Tamer can bring out a {string.lower(data.name)}`)
+		elseif countOut(player) >= limit then
+			toastEvent:FireClient(player, if limit == 1 then "Only 1 companion can be out. Send the other home first"
+				else `Only {limit} companions can be out. Send one home first`)
+		elseif recoverAt and recoverAt > os.clock() then
+			toastEvent:FireClient(player, `{entry.name} is still recovering ({math.ceil(recoverAt - os.clock())} s)`)
+		else
+			entry.active = true
+			spawn(player, entry, data, slotPosition(root, countOut(player) + 1), yawOf(root.CFrame), entry.name)
+			PlayerData.markDirty(player)
+		end
+	elseif not active then
+		if current then
+			despawn(current, true)
+		end
+		if entry.active then
+			entry.active = false
+			PlayerData.markDirty(player)
+		end
+	end
+	send(player)
+end
+
+local function onRelease(player: Player, uid: any)
+	if tooSoon(player) then
+		return
+	end
+	local entry, index = findEntry(player, uid)
+	local roster = rosterOf(player)
+	if not entry or not index or not roster then
+		return
+	end
+	local current = findOut(player, entry.uid)
+	if current then
+		despawn(current, true)
+	end
+	table.remove(roster, index)
+	knockedOf(player)[entry.uid] = nil
+	PlayerData.markDirty(player)
+	toastEvent:FireClient(player, `You released {entry.name} back into the wild`)
+	send(player)
+end
+
+-- Players --------------------------------------------------------------------------------------
+
+local function onCharacter(player: Player, character: Model)
+	-- Players and companions don't push each other around.
+	local function group(instance: Instance)
+		if instance:IsA("BasePart") then
+			instance.CollisionGroup = PLAYER_GROUP
+		end
+	end
+	for _, descendant in character:GetDescendants() do
+		group(descendant)
+	end
+	character.DescendantAdded:Connect(group)
+
+	local humanoid = character:WaitForChild("Humanoid", 5)
+	if not humanoid or not humanoid:IsA("Humanoid") then
+		return
+	end
+	humanoid.Died:Connect(function()
+		despawnAll(player) -- they come back, at full health, when the owner does
+	end)
+	knockedUntil[player] = {}
+	focus[player] = nil
+	ownerThreat[player] = nil
+	buffs[player] = nil
+	task.wait(0.5) -- let the character land at the spawn point first
+	if player.Character == character and character.Parent then
+		Companions.refresh(player)
+	end
+end
+
+local function onPlayer(player: Player)
+	player.CharacterAdded:Connect(function(character)
+		onCharacter(player, character)
+	end)
+	player.CharacterRemoving:Connect(function()
+		despawnAll(player)
+	end)
+	player:GetAttributeChangedSignal("Level"):Connect(function()
+		for _, c in listOf(player) do
+			applyStats(c, c.state ~= "KnockedOut") -- a level-up heals companions, like their owner
+		end
+	end)
+	if player.Character then
+		task.spawn(onCharacter, player, player.Character)
+	end
+end
+
+local started = false
+function Companions.start()
+	if started then
+		return
+	end
+	started = true
+	for _, name in { GROUP, PLAYER_GROUP } do
+		if not PhysicsService:IsCollisionGroupRegistered(name) then
+			PhysicsService:RegisterCollisionGroup(name)
+		end
+	end
+	PhysicsService:CollisionGroupSetCollidable(GROUP, PLAYER_GROUP, false)
+	PhysicsService:CollisionGroupSetCollidable(GROUP, GROUP, false)
+	getFolder()
+
+	Net.event("CompanionSetActive").OnServerEvent:Connect(onSetActive)
+	Net.event("CompanionRelease").OnServerEvent:Connect(onRelease)
+	PlayerData.onLoaded(send)
+
+	-- Companions pick their targets from who hit what.
+	Combat.onDamage(function(model: Model, source: Instance?, via: Model?)
+		local now = os.clock()
+		if source and source:IsA("Player") then
+			if not via and CollectionService:HasTag(model, TAG) then
+				focus[source] = { model = model, at = now }
+			end
+		elseif source and source:IsA("Model") then
+			local c = byModel[model]
+			if c then
+				c.threat = source
+				c.threatAt = now
+			else
+				local player = Players:GetPlayerFromCharacter(model)
+				if player then
+					ownerThreat[player] = { model = source, at = now }
+				end
+			end
+		end
+	end)
+
+	Players.PlayerAdded:Connect(onPlayer)
+	for _, player in Players:GetPlayers() do
+		onPlayer(player)
+	end
+	Players.PlayerRemoving:Connect(function(player)
+		despawnAll(player)
+		out[player] = nil
+		focus[player] = nil
+		ownerThreat[player] = nil
+		knockedUntil[player] = nil
+		buffs[player] = nil
+		lastRequest[player] = nil
+	end)
+
+	local accumulated = 0
+	RunService.Heartbeat:Connect(function(dt)
+		accumulated += dt
+		if accumulated < THINK_INTERVAL then
+			return
+		end
+		local step = accumulated
+		accumulated = 0
+		for _, list in out do
+			for _, c in table.clone(list) do
+				local ok, err = pcall(think, c, step)
+				if not ok then
+					warn("Companion think failed:", err)
+				end
+				-- What it is doing, for anything that wants to show it (and for testing).
+				if c.model.Parent and c.model:GetAttribute("State") ~= c.state then
+					c.model:SetAttribute("State", c.state)
+				end
+			end
+		end
+	end)
+end
+
+return Companions
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000012"><Properties><string name="Name">Creature</string><ProtectedString name="Source"><![CDATA[-- Wild creatures: a low-poly body welded to a Humanoid root, driven by a small state machine.
 --
 -- Wander -> (player in aggro range, or hit) -> Chase -> Windup (glows red) -> bite -> Recover -> Chase ...
 -- Too far from home -> Return (heals on the way) -> Wander.  Health 0 -> Dead (fades, respawns later).
 -- In co-op a chasing creature switches to another player who is clearly closer, and when its
 -- target dies a hostile creature turns on whoever else is near instead of going home.
+--
+-- Passive creatures (foxes) never fight: Wander -> (a player comes close, or something sudden
+-- happens nearby) -> Flee -> Return. A player carrying food the creature likes doesn't scare it
+-- (the calm check, set by Taming). While it is being fed it stands still (Held).
+-- A creature that is tamed leaves through Creature.remove: no XP, loot or quest credit.
+-- A companion's bite counts for its owner, and can bring the creature onto the companion.
 --
 -- The body comes from ServerStorage.Assets.<id> if a replacement model is there (see Assets.luau),
 -- otherwise it is built from grey parts.
@@ -1231,10 +2222,18 @@ local SETTLE_TIME = 1.5 -- new creatures are held still this long: freshly made 
 -- before its collision is solid, and anything dropped on it straight away falls through
 local FALLEN_RESPAWN = 3 -- seconds before a creature that fell out of the world is replaced
 local MAX_SPAWN_SLOPE = 2.5 -- studs of ground height difference allowed under a new creature
+local RESPAWN_CLEARANCE = 60 -- creatures don't (re)appear this close to a player (wolves notice at 55)
+local RESPAWN_RETRY = 2 -- seconds before trying again when players are standing on the spawn area
+local FLEE_STEP = 20 -- how far ahead a fleeing creature aims each think
+local FLEE_SAFE = 1.6 -- it keeps running until players are this many times its flee range away
+local FLEE_TURNS = { 0, 50, -50, 100, -100, 150, -150 } -- degrees to try when the way ahead is blocked
+local FLEE_MAX_RISE = 5 -- studs of climb or drop over one flee step that count as blocked (hills, the pond)
 
 local all: { any } = {}
 local byModel: { [Model]: any } = {}
 local defeatListeners: { (CreatureData.CreatureInfo, { Player }, Vector3) -> () } = {}
+local spawnListeners: { (any) -> () } = {}
+local calmCheck: ((any, Player) -> boolean)? = nil
 local folder: Folder? = nil
 
 local function getFolder(): Folder
@@ -1293,7 +2292,7 @@ local function buildGreyBody(data: CreatureData.CreatureInfo, position: Vector3)
 		add("Eye", Vector3.new(0.22 * s, 0.22 * s, 0.1 * s), Vector3.new(side * 0.42 * s, 1.0 * s, front - 1.42 * s), Color3.fromRGB(25, 20, 20))
 		add("Leg", Vector3.new(0.5 * s, legLength, 0.5 * s), Vector3.new(side * bodyWidth * 0.32, -bodyHeight / 2 - legLength / 2 + 0.1, front * 0.7), data.color)
 		add("Leg", Vector3.new(0.5 * s, legLength, 0.5 * s), Vector3.new(side * bodyWidth * 0.32, -bodyHeight / 2 - legLength / 2 + 0.1, -front * 0.7), data.color)
-		if data.id == "wolf" then
+		if data.id == "wolf" or data.id == "fox" then
 			add("Ear", Vector3.new(0.4 * s, 0.7 * s, 0.25 * s), Vector3.new(side * 0.45 * s, 1.75 * s, front - 0.4 * s), data.color)
 		elseif data.id == "boar" then
 			add("Tusk", Vector3.new(0.15 * s, 0.45 * s, 0.15 * s), Vector3.new(side * 0.42 * s, 0.25 * s, front - 2.1 * s), data.accent)
@@ -1301,6 +2300,12 @@ local function buildGreyBody(data: CreatureData.CreatureInfo, position: Vector3)
 	end
 	if data.id == "wolf" then
 		add("Tail", Vector3.new(0.45 * s, 0.45 * s, 1.8 * s), Vector3.new(0, 0.35 * s, -front + 0.7 * s), data.accent, CFrame.Angles(math.rad(25), 0, 0))
+		add("Chest", Vector3.new(bodyWidth * 0.9, bodyHeight * 0.7, 0.3 * s), Vector3.new(0, -0.1 * s, front - 0.05), data.accent)
+	elseif data.id == "fox" then
+		-- A bushy tail held up, with a pale tip.
+		local lift = CFrame.Angles(math.rad(-25), 0, 0)
+		add("Tail", Vector3.new(0.75 * s, 0.75 * s, 2.2 * s), Vector3.new(0, 0.5 * s, -front + 0.9 * s), data.color, lift)
+		add("TailTip", Vector3.new(0.65 * s, 0.65 * s, 0.8 * s), Vector3.new(0, 1.1 * s, -front + 2.2 * s), data.accent, lift)
 		add("Chest", Vector3.new(bodyWidth * 0.9, bodyHeight * 0.7, 0.3 * s), Vector3.new(0, -0.1 * s, front - 0.05), data.accent)
 	else
 		add("Tail", Vector3.new(0.2 * s, 0.2 * s, 0.6 * s), Vector3.new(0, 0.4 * s, -front + 0.25 * s), data.color)
@@ -1346,8 +2351,11 @@ local function buildFromAsset(data: CreatureData.CreatureInfo, position: Vector3
 	return model, humanoid, root, math.max(size.X, size.Z) * 0.45, top + 0.5
 end
 
--- Builds a creature: the replacement model if there is one, otherwise the grey body.
-local function buildModel(data: CreatureData.CreatureInfo, position: Vector3): (Model, Humanoid, BasePart)
+-- Builds a creature's body under `parent`: the replacement model if there is one, otherwise the
+-- grey body. `wild` ones are tagged Damageable, so players can attack and lock on to them;
+-- companions (Companions.luau) are built with `wild` false and can't be hit by players.
+-- The root starts anchored: whoever owns the body releases it once the ground is solid.
+function Creature.buildBody(data: CreatureData.CreatureInfo, position: Vector3, parent: Instance, wild: boolean): (Model, Humanoid, BasePart)
 	local model: Model, humanoid: Humanoid, root: BasePart, hitRadius: number, hitHeight: number
 	local assetModel, assetHumanoid, assetRoot, assetRadius, assetHeight = buildFromAsset(data, position)
 	if assetModel and assetHumanoid and assetRoot then
@@ -1371,11 +2379,13 @@ local function buildModel(data: CreatureData.CreatureInfo, position: Vector3): (
 	model:SetAttribute("CreatureId", data.id)
 	model:SetAttribute("HitRadius", hitRadius)
 	model:SetAttribute("HitHeight", hitHeight)
-	model:SetAttribute("Hostile", data.behaviour == "Hostile")
+	model:SetAttribute("Hostile", wild and data.behaviour == "Hostile")
 	model:SetAttribute("Void", data.isVoid)
-	CollectionService:AddTag(model, Config.TAG_DAMAGEABLE)
+	if wild then
+		CollectionService:AddTag(model, Config.TAG_DAMAGEABLE)
+	end
 	root.Anchored = true -- released by think() once SETTLE_TIME has passed
-	model.Parent = getFolder()
+	model.Parent = parent
 	return model, humanoid, root
 end
 
@@ -1398,14 +2408,18 @@ export type Creature = typeof(setmetatable(
 		settleUntil: number?,
 		stunnedUntil: number, -- Shield Slam, Frost Nova
 		tauntedUntil: number, -- Taunt: keeps its target and won't switch
-		onDespawn: ((fell: boolean) -> ())?,
+		fleeFrom: Vector3, -- what a fleeing creature is running from
+		fleeUntil: number,
+		holder: Model?, -- the character feeding it (Held)
+		onDespawn: ((reason: string) -> ())?,
 	},
 	Creature
 ))
 
--- `onDespawn(fell)` runs when the body has been removed; `fell` is true if it fell out of the world.
-function Creature.spawn(data: CreatureData.CreatureInfo, position: Vector3, onDespawn: ((fell: boolean) -> ())?): Creature
-	local model, humanoid, root = buildModel(data, position)
+-- `onDespawn(reason)` runs when the body has been removed. `reason` is "defeated", "fell" (out of
+-- the world) or "tamed".
+function Creature.spawn(data: CreatureData.CreatureInfo, position: Vector3, onDespawn: ((reason: string) -> ())?): Creature
+	local model, humanoid, root = Creature.buildBody(data, position, getFolder(), true)
 	local warning = Instance.new("Highlight")
 	warning.Name = "WindupWarning"
 	warning.FillColor = Color3.fromRGB(255, 40, 30)
@@ -1433,18 +2447,51 @@ function Creature.spawn(data: CreatureData.CreatureInfo, position: Vector3, onDe
 		settleUntil = os.clock() + SETTLE_TIME,
 		stunnedUntil = 0,
 		tauntedUntil = 0,
+		fleeFrom = position,
+		fleeUntil = 0,
+		holder = nil,
 		onDespawn = onDespawn,
 	}, Creature)
 
-	Combat.onHit(model, function(source)
-		self:provoke(source)
+	Combat.onHit(model, function(source, via)
+		self:provoke(source, via)
 	end)
 	humanoid.Died:Connect(function()
 		self:die()
 	end)
 	table.insert(all, self)
 	byModel[model] = self
+	for _, listener in spawnListeners do
+		task.spawn(listener, self)
+	end
 	return self
+end
+
+-- Runs `listener(creature)` for every creature spawned from now on (Taming adds feed prompts).
+function Creature.onSpawned(listener: (any) -> ())
+	table.insert(spawnListeners, listener)
+end
+
+-- `check(creature, player)` returns true when `player` doesn't scare a passive `creature`
+-- (Taming: they carry food it likes).
+function Creature.setCalmCheck(check: (any, Player) -> boolean)
+	calmCheck = check
+end
+
+-- The living wild creature closest to `position` within `radius` that `accept` says yes to.
+function Creature.nearest(position: Vector3, radius: number, accept: (any) -> boolean): Creature?
+	local best: Creature? = nil
+	local bestDistance = radius
+	for _, creature in all do
+		if creature.state ~= "Dead" then
+			local distance = (creature.root.Position - position).Magnitude
+			if distance <= bestDistance and accept(creature) then
+				best = creature
+				bestDistance = distance
+			end
+		end
+	end
+	return best
 end
 
 -- The creature object for a model, if it is one.
@@ -1567,18 +2614,100 @@ function Creature.alertPack(self: Creature, character: Model)
 	end
 end
 
-function Creature.provoke(self: Creature, source: Instance?)
+-- `source` is the player who gets the credit. `via` is their companion when it did the biting:
+-- the creature then goes for the companion rather than the player.
+function Creature.provoke(self: Creature, source: Instance?, via: Model?)
 	if self.state == "Dead" then
 		return
 	end
 	if source and source:IsA("Player") then
 		self.lastAttacker = source
 		self.damagers[source] = true
-		local character = source.Character
-		if character and Combat.isAlive(character) and (self.state == "Wander" or self.state == "Return") then
-			self:setTarget(character)
-			self:alertPack(character)
+		local attacker = via or source.Character
+		if not attacker or not Combat.isAlive(attacker) then
+			return
 		end
+		if self.data.behaviour == "Passive" then
+			local attackerRoot = Combat.rootOf(attacker)
+			if attackerRoot then
+				self:flee(attackerRoot.Position, 4)
+			end
+		elseif self.state == "Wander" or self.state == "Return" then
+			self:setTarget(attacker)
+			self:alertPack(attacker)
+		elseif via and self.target ~= via and (self.state == "Chase" or self.state == "Recover")
+			and os.clock() >= self.tauntedUntil and math.random() < 0.5 then
+			self.target = via -- sometimes turns on the companion that bit it
+		end
+	end
+end
+
+-- For passive creatures: the nearest player close enough to scare it, or nil. Players the calm
+-- check vouches for (they carry food it likes) and vanished Ninjas don't count.
+function Creature.nearestThreat(self: Creature, rangeScale: number?): Model?
+	local range = self.data.fleeRange
+	if not range then
+		return nil
+	end
+	local best: Model? = nil
+	local bestDistance = range * (rangeScale or 1)
+	local position = self.root.Position
+	for _, player in Players:GetPlayers() do
+		local character = player.Character
+		if character and Combat.isAlive(character) and not character:GetAttribute("Vanished") then
+			local root = Combat.rootOf(character)
+			if root then
+				local distance = (root.Position - position).Magnitude
+				if distance < bestDistance and not (calmCheck and calmCheck(self, player)) then
+					best = character
+					bestDistance = distance
+				end
+			end
+		end
+	end
+	return best
+end
+
+-- Runs away from `from` for at least `seconds`.
+function Creature.flee(self: Creature, from: Vector3, seconds: number)
+	if self.state == "Dead" then
+		return
+	end
+	self.fleeFrom = from
+	self.fleeUntil = math.max(self.fleeUntil, os.clock() + seconds)
+	self.target = nil
+	self.holder = nil
+	self.warning.Enabled = false
+	self.state = "Flee"
+end
+
+-- Something sudden happened at `position` (a dash, an attack, a skill): passive creatures
+-- within `radius` bolt, even from a player carrying food.
+function Creature.startle(position: Vector3, radius: number)
+	for _, creature in all do
+		if creature.data.behaviour == "Passive" and creature.state ~= "Dead"
+			and (creature.root.Position - position).Magnitude <= radius then
+			creature:flee(position, 3)
+		end
+	end
+end
+
+-- Stands still facing `character` while it is being fed (Taming). `unhold` lets it wander again.
+function Creature.hold(self: Creature, character: Model)
+	if self.state == "Dead" then
+		return
+	end
+	self.holder = character
+	self.target = nil
+	self.state = "Held"
+	self.humanoid:MoveTo(self.root.Position)
+end
+
+function Creature.unhold(self: Creature)
+	if self.state == "Held" then
+		self.holder = nil
+		self.state = "Wander"
+		self.timer = 1
 	end
 end
 
@@ -1595,8 +2724,8 @@ end
 
 function Creature.targetRoot(self: Creature): BasePart?
 	local target = self.target
-	-- A vanished Ninja can't be followed.
-	if target and Combat.isAlive(target) and not target:GetAttribute("Vanished") then
+	-- A vanished Ninja can't be followed, and a knocked-out companion is left alone.
+	if target and Combat.isAlive(target) and not target:GetAttribute("Vanished") and not target:GetAttribute("KnockedOut") then
 		return Combat.rootOf(target)
 	end
 	return nil
@@ -1646,10 +2775,74 @@ function Creature.think(self: Creature, dt: number)
 		return
 	end
 
-	if state == "Wander" then
+	if self.data.fleeRange and (state == "Wander" or state == "Return") then
+		local threat = self:nearestThreat()
+		local threatRoot = threat and Combat.rootOf(threat)
+		if threatRoot then
+			self:flee(threatRoot.Position, 2)
+			return
+		end
+	end
+
+	if state == "Flee" then
+		local threat = self:nearestThreat(FLEE_SAFE)
+		local threatRoot = threat and Combat.rootOf(threat)
+		if threatRoot then
+			self.fleeFrom = threatRoot.Position
+			self.fleeUntil = math.max(self.fleeUntil, now + 1)
+		end
+		if now >= self.fleeUntil then
+			-- Safe: stop and catch its breath, then wander as before.
+			self.state = "Wander"
+			self.timer = 2 + math.random() * 2
+			self.humanoid:MoveTo(position)
+			return
+		end
+		local away = Vector3.new(position.X - self.fleeFrom.X, 0, position.Z - self.fleeFrom.Z)
+		if away.Magnitude < 0.5 then
+			local angle = math.random() * math.pi * 2
+			away = Vector3.new(math.cos(angle), 0, math.sin(angle))
+		end
+		away = away.Unit
+		-- Stay inside the map, within reach of home and off steep ground (the hills around the
+		-- map slow a creature to a crawl): when the way ahead is blocked, turn and run along
+		-- the edge instead of stopping there.
+		local edge = Config.MAP_HALF - 20
+		local goal = position + away * FLEE_STEP
+		local groundHere = Build.groundY(position.X, position.Z)
+		for _, degrees in FLEE_TURNS do
+			local direction = CFrame.Angles(0, math.rad(degrees), 0):VectorToWorldSpace(away)
+			local candidate = position + direction * FLEE_STEP
+			if math.abs(candidate.X) <= edge and math.abs(candidate.Z) <= edge
+				and flatDistance(candidate, self.home) <= self.data.leash
+				and math.abs(Build.groundY(candidate.X, candidate.Z) - groundHere) <= FLEE_MAX_RISE then
+				goal = candidate
+				break
+			end
+		end
+		self.humanoid.WalkSpeed = self.data.fleeSpeed or self.data.walkSpeed
+		self.humanoid:MoveTo(goal)
+	elseif state == "Held" then
+		local holder = self.holder
+		local holderRoot = if holder and Combat.isAlive(holder) then Combat.rootOf(holder) else nil
+		if not holderRoot then
+			self:unhold()
+			return
+		end
+		self.humanoid:MoveTo(position)
+		self:faceTowards(holderRoot.Position)
+	elseif state == "Wander" then
 		self:lookForTarget()
 		if self.state ~= "Wander" then
 			return
+		end
+		if self.data.behaviour == "Passive" and self.humanoid.Health < self.humanoid.MaxHealth then
+			-- Passive creatures don't walk home to heal (that could lead them back to whoever
+			-- scared them); they recover slowly wherever they are.
+			self.humanoid.Health = math.min(self.humanoid.MaxHealth, self.humanoid.Health + self.humanoid.MaxHealth * 0.05 * dt)
+			if self.humanoid.Health >= self.humanoid.MaxHealth then
+				table.clear(self.damagers)
+			end
 		end
 		self.timer -= dt
 		if self.timer <= 0 then
@@ -1772,9 +2965,29 @@ function Creature.die(self: Creature, fell: boolean?)
 	task.delay(1.2, function()
 		self.model:Destroy()
 		if self.onDespawn then
-			self.onDespawn(fell == true)
+			self.onDespawn(if fell then "fell" else "defeated")
 		end
 	end)
+end
+
+-- Takes the creature out of the wild at once without a defeat: no XP, loot or quest credit.
+-- Used when it is tamed (`reason` "tamed"); its body is replaced by a companion.
+function Creature.remove(self: Creature, reason: string)
+	if self.state == "Dead" then
+		return
+	end
+	self.state = "Dead"
+	self.warning.Enabled = false
+	CollectionService:RemoveTag(self.model, Config.TAG_DAMAGEABLE)
+	local index = table.find(all, self)
+	if index then
+		table.remove(all, index)
+	end
+	byModel[self.model] = nil
+	self.model:Destroy()
+	if self.onDespawn then
+		self.onDespawn(reason)
+	end
 end
 
 -- Runs `listener(data, players, position)` whenever a creature is defeated; `players` is everyone
@@ -1807,7 +3020,19 @@ function Creature.start()
 	end)
 end
 
--- Keeps `count` creatures alive around `center`, replacing each one some time after it dies.
+local function playerWithin(position: Vector3, distance: number): boolean
+	for _, player in Players:GetPlayers() do
+		local character = player.Character
+		local root = character and Combat.rootOf(character)
+		if root and (root.Position - position).Magnitude < distance then
+			return true
+		end
+	end
+	return false
+end
+
+-- Keeps `count` creatures alive around `center`, replacing each one some time after it dies or
+-- is tamed. A replacement never appears beside a player: it waits until the spot is clear.
 function Creature.spawner(data: CreatureData.CreatureInfo, center: Vector3, count: number, radius: number)
 	local footprint = 2.5 * data.scale
 	local samples = { Vector2.zero, Vector2.new(footprint, 0), Vector2.new(-footprint, 0), Vector2.new(0, footprint), Vector2.new(0, -footprint) }
@@ -1827,12 +3052,19 @@ function Creature.spawner(data: CreatureData.CreatureInfo, center: Vector3, coun
 				high = math.max(high, y)
 			end
 			position = Vector3.new(x, high + 0.3, z)
-			if high - low <= MAX_SPAWN_SLOPE then
+			if high - low <= MAX_SPAWN_SLOPE and not playerWithin(position, RESPAWN_CLEARANCE) then
 				break
 			end
 		end
-		Creature.spawn(data, position, function(fell: boolean)
-			task.delay(if fell then FALLEN_RESPAWN else data.respawn, spawnOne)
+		if playerWithin(position, RESPAWN_CLEARANCE) then
+			task.delay(RESPAWN_RETRY, spawnOne) -- players are all over the area: wait for them to move on
+			return
+		end
+		Creature.spawn(data, position, function(reason: string)
+			local seconds = if reason == "fell" then FALLEN_RESPAWN
+				elseif reason == "tamed" then CreatureData.TAMED_RESPAWN
+				else data.respawn
+			task.delay(seconds, spawnOne)
 		end)
 	end
 	for _ = 1, count do
@@ -1841,7 +3073,7 @@ function Creature.spawner(data: CreatureData.CreatureInfo, center: Vector3, coun
 end
 
 return Creature
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000011"><Properties><string name="Name">Drops</string><ProtectedString name="Source"><![CDATA[-- Loot on the ground. In co-op every player gets their own drops: only the owner sees a drop
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000013"><Properties><string name="Name">Drops</string><ProtectedString name="Source"><![CDATA[-- Loot on the ground. In co-op every player gets their own drops: only the owner sees a drop
 -- (DropSpawned goes to them alone) and only they can pick it up, by walking over it.
 -- The server tracks every drop and decides pickups; clients just draw them.
 
@@ -1944,7 +3176,7 @@ function Drops.start()
 end
 
 return Drops
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000012"><Properties><string name="Name">Dummy</string><ProtectedString name="Source"><![CDATA[-- Straw training dummies. They never die: below half health they patch themselves up.
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000014"><Properties><string name="Name">Dummy</string><ProtectedString name="Source"><![CDATA[-- Straw training dummies. They never die: below half health they patch themselves up.
 
 local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -1996,7 +3228,7 @@ function Dummy.create(parent: Instance, position: Vector3, facing: Vector3): Mod
 end
 
 return Dummy
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000013"><Properties><string name="Name">Hearthmoor</string><ProtectedString name="Source"><![CDATA[-- Builds Hearthmoor when the server starts: terrain, the village, scenery, people,
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000015"><Properties><string name="Name">Hearthmoor</string><ProtectedString name="Source"><![CDATA[-- Builds Hearthmoor when the server starts: terrain, the village, scenery, people,
 -- training dummies and creature spawners. Positions match the Godot Phase 1 layout
 -- (metres x 3.5 = studs). North is -Z; the village centre is (0, 0).
 --
@@ -2568,6 +3800,9 @@ local function buildCreatures()
 	Creature.spawner(CreatureData.creatures.wolf, v2(-72, -40), 3, 40)
 	Creature.spawner(CreatureData.creatures.wolf, v2(74, -30), 3, 40)
 	Creature.spawner(CreatureData.creatures.boar, v2(-55, 70), 3, 45)
+	-- Foxes in the south meadow, one group each side of the pond path, well away from the wolves.
+	Creature.spawner(CreatureData.creatures.fox, v2(-12, 88), 3, 45)
+	Creature.spawner(CreatureData.creatures.fox, v2(62, 52), 3, 45)
 end
 
 function Hearthmoor.build()
@@ -2582,7 +3817,7 @@ function Hearthmoor.build()
 end
 
 return Hearthmoor
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000014"><Properties><string name="Name">Interactables</string><ProtectedString name="Source"><![CDATA[-- Talk to NPCs and read signs. Uses ProximityPrompts, which work with keyboard (F),
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000016"><Properties><string name="Name">Interactables</string><ProtectedString name="Source"><![CDATA[-- Talk to NPCs and read signs. Uses ProximityPrompts, which work with keyboard (F),
 -- controller (Y) and touch automatically.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -2646,7 +3881,7 @@ function Interactables.prompt(anchor: BasePart, actionText: string, objectText: 
 end
 
 return Interactables
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000015"><Properties><string name="Name">Inventory</string><ProtectedString name="Source"><![CDATA[-- Each player's items (saved in PlayerData), gathering, crafting at the workbench and using items.
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000017"><Properties><string name="Name">Inventory</string><ProtectedString name="Source"><![CDATA[-- Each player's items (saved in PlayerData), gathering, crafting at the workbench and using items.
 -- The server owns every count; clients only ask (UseItem, Craft) and are sent their counts back.
 
 local Players = game:GetService("Players")
@@ -2818,13 +4053,14 @@ function Inventory.start()
 end
 
 return Inventory
-]]></ProtectedString></Properties></Item><Item class="Script" referent="RBX00000016"><Properties><string name="Name">Main</string><ProtectedString name="Source"><![CDATA[-- Server entry point. Order matters: remotes and the world must exist before anyone spawns.
+]]></ProtectedString></Properties></Item><Item class="Script" referent="RBX00000018"><Properties><string name="Name">Main</string><ProtectedString name="Source"><![CDATA[-- Server entry point. Order matters: remotes and the world must exist before anyone spawns.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Net")) -- creates the RemoteEvents
 
 local Combat = require(script.Parent:WaitForChild("Combat"))
+local Companions = require(script.Parent:WaitForChild("Companions"))
 local Creature = require(script.Parent:WaitForChild("Creature"))
 local Drops = require(script.Parent:WaitForChild("Drops"))
 local Hearthmoor = require(script.Parent:WaitForChild("Hearthmoor"))
@@ -2833,13 +4069,17 @@ local PlayerData = require(script.Parent:WaitForChild("PlayerData"))
 local PlayerSetup = require(script.Parent:WaitForChild("PlayerSetup"))
 local Quests = require(script.Parent:WaitForChild("Quests"))
 local Skills = require(script.Parent:WaitForChild("Skills"))
+local Taming = require(script.Parent:WaitForChild("Taming"))
 
 PlayerData.start() -- starts loading saves as players join
 Quests.start()
 Inventory.start()
 Drops.start()
+Companions.start()
+Taming.start() -- before the world is built, so every creature gets its feed prompt
 
 -- Everyone who damaged a creature gets its full XP, quest credit and their own loot.
+-- A companion's bites count for its owner.
 Creature.onDefeated(function(data, players, position)
 	for _, player in players do
 		PlayerData.addXP(player, data.xp, `{data.name} defeated`)
@@ -2854,7 +4094,7 @@ Skills.start()
 Hearthmoor.build()
 
 workspace:SetAttribute("WorldReady", true)
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000017"><Properties><string name="Name">PlayerData</string><ProtectedString name="Source"><![CDATA[-- Each player's saved progress: class, level, XP and quests. Loaded on join, saved on leave,
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000019"><Properties><string name="Name">PlayerData</string><ProtectedString name="Source"><![CDATA[-- Each player's saved progress: class, level, XP, quests, items and companions. Loaded on join, saved on leave,
 -- every few minutes and when the server shuts down. One DataStore key per player
 -- ("player_<UserId>"), with a `version` field so old saves can be upgraded.
 --
@@ -2870,17 +4110,22 @@ local RunService = game:GetService("RunService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local ClassData = require(Shared:WaitForChild("ClassData"))
+local CompanionData = require(Shared:WaitForChild("CompanionData"))
+local CreatureData = require(Shared:WaitForChild("CreatureData"))
 local Net = require(Shared:WaitForChild("Net"))
 local Progression = require(Shared:WaitForChild("Progression"))
 
 local PlayerData = {}
 
-local SAVE_VERSION = 2 -- 2: added inventory and gifts
+local SAVE_VERSION = 3 -- 2: added inventory and gifts; 3: added companions
 local STORE_NAME = if RunService:IsStudio() then "PlayerData_Studio" else "PlayerData"
 local AUTOSAVE_INTERVAL = 180
 local RETRIES = 3
 
 export type QuestState = { status: string, progress: number } -- status: "active" | "ready" | "done"
+-- A tamed creature. `id` is its CreatureData id; `active` means it is out with the player
+-- (the others wait at home). Health isn't saved: companions come back at full health.
+export type CompanionEntry = { uid: number, id: string, name: string, active: boolean }
 export type Data = {
 	version: number,
 	class: string?,
@@ -2889,6 +4134,8 @@ export type Data = {
 	quests: { [string]: QuestState },
 	inventory: { [string]: number }, -- item id -> count
 	gifts: { [string]: boolean }, -- one-off gifts already given (e.g. the Elder's potions)
+	companions: { CompanionEntry }, -- shared by all the player's classes
+	nextCompanionUid: number,
 }
 
 local toastEvent = Net.event("Toast")
@@ -2917,7 +4164,7 @@ local function key(player: Player): string
 end
 
 local function newData(): Data
-	return { version = SAVE_VERSION, class = nil, level = 1, xp = 0, quests = {}, inventory = {}, gifts = {} }
+	return { version = SAVE_VERSION, class = nil, level = 1, xp = 0, quests = {}, inventory = {}, gifts = {}, companions = {}, nextCompanionUid = 1 }
 end
 
 -- Fills in anything missing and upgrades old versions. Add a step here whenever SAVE_VERSION goes up.
@@ -2942,6 +4189,29 @@ local function migrate(raw: any): Data
 	if data.class ~= nil and not ClassData.get(data.class) then
 		data.class = nil
 	end
+	-- Version 2 saves had no companions. Keep only well-formed entries for creatures that can
+	-- still be tamed, with unique ids, and no more than a player may own.
+	local companions: { CompanionEntry } = {}
+	local seen: { [number]: boolean } = {}
+	local highest = 0
+	if type(data.companions) == "table" then
+		for _, entry: any in data.companions :: any do
+			if #companions >= CompanionData.STABLE_SIZE then
+				break
+			end
+			if type(entry) == "table" and CreatureData.tameable(entry.id) and type(entry.uid) == "number"
+				and entry.uid >= 1 and entry.uid == math.floor(entry.uid) and not seen[entry.uid] then
+				seen[entry.uid] = true
+				highest = math.max(highest, entry.uid)
+				local name = if type(entry.name) == "string" and #entry.name > 0
+					then string.sub(entry.name, 1, CompanionData.MAX_NAME)
+					else CreatureData.creatures[entry.id].name
+				table.insert(companions, { uid = entry.uid, id = entry.id, name = name, active = entry.active == true })
+			end
+		end
+	end
+	data.companions = companions
+	data.nextCompanionUid = math.max(math.floor(tonumber(data.nextCompanionUid) or 1), highest + 1)
 	return data
 end
 
@@ -3136,7 +4406,7 @@ function PlayerData.start()
 end
 
 return PlayerData
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000018"><Properties><string name="Name">PlayerSetup</string><ProtectedString name="Source"><![CDATA[-- Class choice and character setup. Characters don't load until a player picks a class.
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX0000001A"><Properties><string name="Name">PlayerSetup</string><ProtectedString name="Source"><![CDATA[-- Class choice and character setup. Characters don't load until a player picks a class.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -3303,7 +4573,7 @@ function PlayerSetup.start()
 end
 
 return PlayerSetup
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000019"><Properties><string name="Name">Quests</string><ProtectedString name="Source"><![CDATA[-- Quest progress per player (stored in PlayerData), objectives counted from game events, and
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX0000001B"><Properties><string name="Name">Quests</string><ProtectedString name="Source"><![CDATA[-- Quest progress per player (stored in PlayerData), objectives counted from game events, and
 -- what each quest giver says at each stage. Quest definitions live in Shared/QuestData.
 -- In co-op a kill counts for everyone who damaged the creature; each player has their own quests.
 
@@ -3406,7 +4676,7 @@ function Quests.start()
 end
 
 return Quests
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX0000001A"><Properties><string name="Name">Skills</string><ProtectedString name="Source"><![CDATA[-- Class skills (Q and E) and mana. The server checks cooldowns and mana and does everything;
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX0000001C"><Properties><string name="Name">Skills</string><ProtectedString name="Source"><![CDATA[-- Class skills (Q and E) and mana. The server checks cooldowns and mana and does everything;
 -- the client only asks (UseSkill) and draws the cooldown once SkillUsed comes back.
 -- Mana lives here and is shown to clients through the Mana / MaxMana player attributes.
 
@@ -3421,7 +4691,9 @@ local Net = require(Shared:WaitForChild("Net"))
 local Progression = require(Shared:WaitForChild("Progression"))
 local SkillData = require(Shared:WaitForChild("SkillData"))
 local Combat = require(script.Parent:WaitForChild("Combat"))
+local Companions = require(script.Parent:WaitForChild("Companions"))
 local Creature = require(script.Parent:WaitForChild("Creature"))
+local Taming = require(script.Parent:WaitForChild("Taming"))
 
 local Skills = {}
 
@@ -3485,8 +4757,17 @@ local function aimAt(ctx: Context, range: number): Vector3
 	return ctx.aim
 end
 
+-- Everyone a heal reaches: player characters and companions within `radius`.
+local function alliesNear(position: Vector3, radius: number): { Model }
+	local list = Combat.playersNear(position, radius)
+	for _, model in Companions.near(position, radius) do
+		table.insert(list, model)
+	end
+	return list
+end
+
 local function healAllies(ctx: Context, radius: number, fraction: number)
-	for _, character in Combat.playersNear(ctx.root.Position, radius) do
+	for _, character in alliesNear(ctx.root.Position, radius) do
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		if humanoid then
 			Combat.heal(character, humanoid.MaxHealth * fraction)
@@ -3596,7 +4877,7 @@ end
 
 handlers.healing_light = function(ctx, skill)
 	local now = os.clock()
-	for _, character in Combat.playersNear(ctx.root.Position, skill.healRadius) do
+	for _, character in alliesNear(ctx.root.Position, skill.healRadius) do
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		if humanoid then
 			Combat.heal(character, humanoid.MaxHealth * skill.heal)
@@ -3618,6 +4899,15 @@ handlers.holy_nova = function(ctx, skill)
 	healAllies(ctx, skill.healRadius, skill.heal)
 	Combat.burst(ctx.root.Position, skill.radius, Color3.fromRGB(255, 235, 150))
 	return true
+end
+
+-- Beast Tamer. Taming.luau and Companions.luau do the work.
+handlers.tame_beast = function(ctx, skill)
+	return Taming.tameBeast(ctx.player, ctx.root.Position, skill)
+end
+
+handlers.call_of_the_wild = function(ctx, skill)
+	return Companions.callOfTheWild(ctx.player, skill)
 end
 
 local function onUseSkill(player: Player, slot: any, aim: any, locked: any)
@@ -3675,6 +4965,7 @@ local function onUseSkill(player: Player, slot: any, aim: any, locked: any)
 	if not handler or not handler(ctx, skill) then
 		return
 	end
+	Combat.noteAction(player, "skill") -- sudden moves startle passive creatures
 	mana[player] = (mana[player] or 0) - skill.mana
 	ready[slot] = now + skill.cooldown
 	publish(player)
@@ -3733,7 +5024,278 @@ function Skills.start()
 end
 
 return Skills
-]]></ProtectedString></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX00000027"><Properties><string name="Name">StarterPlayer</string><float name="CameraMaxZoomDistance">45</float><bool name="EnableMouseLockOption">true</bool></Properties><Item class="StarterPlayerScripts" referent="RBX00000026"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="Folder" referent="RBX00000025"><Properties><string name="Name">Client</string></Properties><Item class="ModuleScript" referent="RBX0000001D"><Properties><string name="Name">ClassSelect</string><ProtectedString name="Source"><![CDATA[-- The class choice screen shown on joining (and from the "Change class" button).
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX0000001D"><Properties><string name="Name">Taming</string><ProtectedString name="Source"><![CDATA[-- Taming. Two ways to gain a companion, both decided here on the server:
+--
+-- Feeding (any class): creatures with `tameFood` (the fox) get a Feed prompt. Each feed uses one
+-- item and fills the trust meter by 1 / tameFeeds; the creature stands still while it eats.
+-- The attempt fails if the tamer attacks, dashes, uses a skill, jumps or steps too far away, if
+-- anyone startles or hurts the creature, or if it isn't fed again in time. Then it bolts, the
+-- food already given is lost, and it stays wary for a while. Only one player can tame a
+-- creature at a time, and whoever finishes the taming owns it.
+-- A player carrying food a passive creature likes doesn't scare it, so they can walk up to it.
+--
+-- Tame Beast (the Beast Tamer's Q): works on `tamerOnly` creatures (wolves, boars) that are
+-- below the skill's health threshold. Chance = baseChance + missingBonus x missing health.
+--
+-- Either way the wild creature leaves through Creature.remove (no XP, loot or quest credit)
+-- and Companions.add puts a companion where it stood.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local CompanionData = require(Shared:WaitForChild("CompanionData"))
+local ItemData = require(Shared:WaitForChild("ItemData"))
+local Net = require(Shared:WaitForChild("Net"))
+local Combat = require(script.Parent:WaitForChild("Combat"))
+local Companions = require(script.Parent:WaitForChild("Companions"))
+local Creature = require(script.Parent:WaitForChild("Creature"))
+local Interactables = require(script.Parent:WaitForChild("Interactables"))
+local Inventory = require(script.Parent:WaitForChild("Inventory"))
+
+local Taming = {}
+
+local TAMED_COLOR = Color3.fromRGB(255, 214, 110)
+local FAILED_COLOR = Color3.fromRGB(190, 190, 200)
+
+type Session = {
+	player: Player,
+	creature: any, -- a Creature
+	feeds: number,
+	origin: Vector3, -- where the tamer stood at the first feed
+	lastFeed: number,
+}
+
+local sessions: { [any]: Session } = {} -- by creature
+local byPlayer: { [Player]: Session } = {}
+local waryUntil: { [any]: number } = setmetatable({}, { __mode = "k" }) :: any -- by creature
+
+local tamingEvent = Net.event("Taming")
+local toastEvent = Net.event("Toast")
+
+local function lower(name: string): string
+	return string.lower(name)
+end
+
+local function clear(session: Session)
+	if sessions[session.creature] == session then
+		sessions[session.creature] = nil
+	end
+	if byPlayer[session.player] == session then
+		byPlayer[session.player] = nil
+	end
+end
+
+-- Ends an attempt: the creature bolts from `from` (or the tamer) and won't eat for a while.
+local function fail(session: Session, reason: string, from: Vector3?)
+	clear(session)
+	local creature = session.creature
+	waryUntil[creature] = os.clock() + CompanionData.WARY_TIME
+	if session.player.Parent then
+		tamingEvent:FireClient(session.player, creature.model, 0, "failed", reason)
+	end
+	if creature.state ~= "Dead" then
+		Combat.spark(creature.root.Position + Vector3.new(0, 2, 0), FAILED_COLOR)
+	end
+	if creature.state == "Held" then
+		local character = session.player.Character
+		local root = character and Combat.rootOf(character)
+		creature:flee(from or (if root then root.Position else session.origin), 4)
+	end
+end
+
+local function succeed(session: Session)
+	clear(session)
+	local creature = session.creature
+	local data = creature.data
+	local position = creature.root.Position
+	local _, yaw = creature.root.CFrame:ToOrientation()
+	creature:remove("tamed")
+	Companions.add(session.player, data, position, yaw)
+	tamingEvent:FireClient(session.player, nil, 1, "tamed", data.name)
+	Combat.burst(position, 8, TAMED_COLOR)
+end
+
+-- The Feed prompt on a creature was used by `player`.
+local function feed(creature: any, player: Player)
+	local data = creature.data
+	local item = ItemData.items[data.tameFood]
+	local character = player.Character
+	local root = character and Combat.rootOf(character)
+	if not item or not character or not root or not Combat.isAlive(character) or creature.state == "Dead" then
+		return
+	end
+	if (root.Position - creature.root.Position).Magnitude > CompanionData.FEED_RANGE + 6 then
+		return -- further than the prompt reaches
+	end
+	local now = os.clock()
+	local name = lower(data.name)
+	local session = sessions[creature]
+	if session and session.player ~= player then
+		toastEvent:FireClient(player, `Someone else is taming this {name}`)
+		return
+	end
+	if not session then
+		if (waryUntil[creature] or 0) > now then
+			toastEvent:FireClient(player, `The {name} is too wary to eat right now`)
+			return
+		end
+		local ok, reason = Companions.canTame(player, data)
+		if not ok then
+			toastEvent:FireClient(player, reason or "You can't tame that")
+			return
+		end
+	elseif now - session.lastFeed < CompanionData.FEED_GAP then
+		toastEvent:FireClient(player, `The {name} is still eating`)
+		return
+	end
+	if not Inventory.remove(player, item.id, 1) then
+		toastEvent:FireClient(player, `You need {item.name} to feed a {name}. Wolves and boars drop it`)
+		return
+	end
+	if not session then
+		local other = byPlayer[player]
+		if other then
+			fail(other, "You turned to another creature")
+		end
+		local new: Session = { player = player, creature = creature, feeds = 0, origin = root.Position, lastFeed = now }
+		sessions[creature] = new
+		byPlayer[player] = new
+		creature:hold(character)
+		session = new
+	end
+	session.feeds += 1
+	session.lastFeed = now
+	Combat.spark(creature.root.Position + Vector3.new(0, 2, 0), item.color)
+	local needed = data.tameFeeds or 1
+	if session.feeds >= needed then
+		succeed(session)
+	else
+		tamingEvent:FireClient(player, creature.model, session.feeds / needed, "progress", needed - session.feeds)
+	end
+end
+
+-- The calm checks, every frame for the few attempts in progress.
+local function watch()
+	local now = os.clock()
+	for creature, session in sessions do
+		local player = session.player
+		local character = player.Character
+		local root = character and Combat.rootOf(character)
+		local name = lower(creature.data.name)
+		if creature.state == "Dead" then
+			clear(session)
+			if player.Parent then
+				tamingEvent:FireClient(player, nil, 0, "failed", `The {name} is gone`)
+			end
+		elseif not player.Parent or not character or not root or not Combat.isAlive(character) then
+			fail(session, "", session.origin)
+		elseif creature.state ~= "Held" then
+			fail(session, `Something startled the {name}`)
+		elseif (root.Position - session.origin).Magnitude > CompanionData.CALM_RADIUS then
+			fail(session, `You moved too far and the {name} bolted`)
+		elseif root.AssemblyLinearVelocity.Y > CompanionData.JUMP_SPEED then
+			fail(session, `You jumped and startled the {name}`)
+		elseif now - session.lastFeed > CompanionData.FEED_TIMEOUT then
+			fail(session, `The {name} lost interest`)
+		end
+	end
+end
+
+-- The Beast Tamer's Tame Beast, cast from `origin`. Returns true if the skill was used (mana
+-- is spent whether or not the beast gives in), false if there was nothing to use it on.
+function Taming.tameBeast(player: Player, origin: Vector3, skill: { [string]: any }): boolean
+	local function weakened(creature: any): boolean
+		return creature.data.tamerOnly == true and creature.humanoid.Health < creature.humanoid.MaxHealth * skill.threshold
+	end
+	local creature = Creature.nearest(origin, skill.range, weakened)
+	if not creature then
+		local healthy = Creature.nearest(origin, skill.range, function(other: any): boolean
+			return other.data.tamerOnly == true
+		end)
+		toastEvent:FireClient(player, if healthy
+			then `Weaken the {lower(healthy.data.name)} below half health first`
+			else "No beast in range. Tame Beast works on weakened wolves and boars")
+		return false
+	end
+	local data = creature.data
+	local ok, reason = Companions.canTame(player, data)
+	if not ok then
+		toastEvent:FireClient(player, reason or "You can't tame that")
+		return false
+	end
+	local missing = 1 - creature.humanoid.Health / creature.humanoid.MaxHealth
+	local chance = math.clamp(skill.baseChance + skill.missingBonus * missing, 0, 1)
+	local position = creature.root.Position
+	if math.random() < chance then
+		local _, yaw = creature.root.CFrame:ToOrientation()
+		creature:remove("tamed")
+		Companions.add(player, data, position, yaw)
+		tamingEvent:FireClient(player, nil, 1, "tamed", data.name)
+		Combat.burst(position, 10, TAMED_COLOR)
+	else
+		toastEvent:FireClient(player, `The {lower(data.name)} resists! ({math.floor(chance * 100 + 0.5)}% chance)`)
+		Combat.spark(position + Vector3.new(0, 3, 0), FAILED_COLOR)
+	end
+	return true
+end
+
+local started = false
+function Taming.start()
+	if started then
+		return
+	end
+	started = true
+
+	-- Every creature that can be fed gets a Feed prompt as it spawns.
+	Creature.onSpawned(function(creature: any)
+		local data = creature.data
+		local item = data.tameFood and ItemData.items[data.tameFood]
+		if item then
+			Interactables.prompt(creature.root, `Feed {item.name}`, data.name, function(player: Player)
+				feed(creature, player)
+			end, CompanionData.FEED_RANGE)
+		end
+	end)
+
+	-- A player carrying food a passive creature likes doesn't scare it.
+	Creature.setCalmCheck(function(creature: any, player: Player): boolean
+		local food = creature.data.tameFood
+		return food ~= nil and Inventory.count(player, food) > 0
+	end)
+
+	-- Sudden moves (attacks, dashes, skills) end any attempt nearby and scatter passive creatures.
+	Combat.onAction(function(player: Player, _kind: string, position: Vector3)
+		for creature, session in sessions do
+			if creature.state ~= "Dead" and (creature.root.Position - position).Magnitude <= CompanionData.STARTLE_RADIUS then
+				local name = lower(creature.data.name)
+				fail(session, if session.player == player then `You startled the {name}` else `Something startled the {name}`, position)
+			end
+		end
+		Creature.startle(position, CompanionData.STARTLE_RADIUS)
+	end)
+
+	-- Hurting a creature that is being fed ends the attempt.
+	Combat.onDamage(function(model: Model)
+		local creature = Creature.find(model)
+		local session = creature and sessions[creature]
+		if session then
+			fail(session, `Something hurt the {lower(creature.data.name)}`)
+		end
+	end)
+
+	RunService.Heartbeat:Connect(watch)
+	Players.PlayerRemoving:Connect(function(player)
+		local session = byPlayer[player]
+		if session then
+			fail(session, "", session.origin)
+		end
+	end)
+end
+
+return Taming
+]]></ProtectedString></Properties></Item></Item></Item><Item class="StarterPlayer" referent="RBX0000002B"><Properties><string name="Name">StarterPlayer</string><float name="CameraMaxZoomDistance">45</float><bool name="EnableMouseLockOption">true</bool></Properties><Item class="StarterPlayerScripts" referent="RBX0000002A"><Properties><string name="Name">StarterPlayerScripts</string></Properties><Item class="Folder" referent="RBX00000029"><Properties><string name="Name">Client</string></Properties><Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">ClassSelect</string><ProtectedString name="Source"><![CDATA[-- The class choice screen shown on joining (and from the "Change class" button).
 
 local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
@@ -4015,7 +5577,283 @@ function ClassSelect.open(onChosen: (() -> ())?)
 end
 
 return ClassSelect
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX0000001E"><Properties><string name="Name">Controls</string><ProtectedString name="Source"><![CDATA[-- Player input: attack, dash, lock-on, first person, mouse-look and the controls panel.
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">CompanionPanel</string><ProtectedString name="Source"><![CDATA[-- The companion panel (P, controller D-pad left, a Pets button on phones): every companion you
+-- own, which ones are out, and buttons to bring one out, send it home or release it.
+-- The list comes from the server (Companions event); the buttons only send requests
+-- (CompanionSetActive, CompanionRelease). Works with mouse, controller and touch.
+
+local ContextActionService = game:GetService("ContextActionService")
+local GuiService = game:GetService("GuiService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local CreatureData = require(Shared:WaitForChild("CreatureData"))
+local Net = require(Shared:WaitForChild("Net"))
+local UI = require(script.Parent:WaitForChild("UI"))
+
+local CompanionPanel = {}
+
+export type Row = { uid: number, id: string, name: string, active: boolean, allowed: boolean, knockedOut: number }
+
+local setActiveEvent = Net.event("CompanionSetActive")
+local releaseEvent = Net.event("CompanionRelease")
+
+local ROW_HEIGHT = 46
+local RELEASE_RED = Color3.fromRGB(150, 50, 45)
+
+local gui: ScreenGui
+local panel: Frame
+local header: TextLabel
+local list: Frame
+local empty: TextLabel
+local roster: { Row } = {}
+local limit = 1
+local stableSize = 6
+local receivedAt = 0 -- when the list arrived, to count knock-out timers down
+local confirmUid: number? = nil -- Release was pressed once for this one; the next press confirms
+local statusLabels: { [number]: TextLabel } = {}
+local canOpen: () -> boolean = function()
+	return true
+end
+
+-- Called when the panel opens, so other panels can close.
+CompanionPanel.onOpen = nil :: (() -> ())?
+
+function CompanionPanel.isOpen(): boolean
+	return gui ~= nil and panel.Visible
+end
+
+local function usingGamepad(): boolean
+	return UserInputService:GetLastInputType().Name:sub(1, 7) == "Gamepad"
+end
+
+local function statusText(row: Row): string
+	local left = math.ceil(row.knockedOut - (os.clock() - receivedAt))
+	if row.knockedOut > 0 and left > 0 then
+		return if row.active then `Knocked out · {left} s` else `Recovering · {left} s`
+	elseif row.active then
+		return "Out with you"
+	elseif not row.allowed then
+		return "Needs a Beast Tamer"
+	end
+	return "At home"
+end
+
+local function addRow(row: Row, order: number): GuiObject
+	local creature = CreatureData.creatures[row.id]
+	local frame = UI.make("Frame", {
+		Name = `Companion{row.uid}`,
+		BackgroundColor3 = Color3.fromRGB(36, 30, 48),
+		BackgroundTransparency = 0.3,
+		BorderSizePixel = 0,
+		Size = UDim2.new(1, 0, 0, ROW_HEIGHT),
+		LayoutOrder = order,
+		Parent = list,
+	}, { UI.corner(8) })
+	UI.make("Frame", {
+		BackgroundColor3 = if creature then creature.color else UI.MUTED,
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 8, 0.5, 0),
+		Size = UDim2.fromOffset(24, 24),
+		Parent = frame,
+	}, { UI.corner(12) })
+	local name = UI.label(row.name, 15, UI.INK, true)
+	name.Position = UDim2.fromOffset(42, 4)
+	name.Size = UDim2.new(1, -250, 0, 20)
+	name.Parent = frame
+	local status = UI.label(statusText(row), 12, if row.active then UI.GOLD else UI.MUTED)
+	status.Position = UDim2.fromOffset(42, 23)
+	status.Size = UDim2.new(1, -250, 0, 18)
+	status.Parent = frame
+	statusLabels[row.uid] = status
+
+	local toggle = UI.button(if row.active then "Send home" else "Bring out", {
+		Name = "Toggle",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -96, 0.5, 0),
+		Size = UDim2.fromOffset(104, 32),
+		TextSize = 14,
+		-- Green when it can come out; plain for Send home, or when this class can't bring it out.
+		BackgroundColor3 = if row.active or not row.allowed then Color3.fromRGB(44, 36, 58) else Color3.fromRGB(70, 110, 60),
+		Parent = frame,
+	})
+	toggle.Activated:Connect(function()
+		confirmUid = nil
+		setActiveEvent:FireServer(row.uid, not row.active) -- the server explains if it can't
+	end)
+	local confirming = confirmUid == row.uid
+	local release = UI.button(if confirming then "Sure?" else "Release", {
+		Name = "Release",
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -8, 0.5, 0),
+		Size = UDim2.fromOffset(80, 32),
+		TextSize = 14,
+		BackgroundColor3 = if confirming then RELEASE_RED else Color3.fromRGB(44, 36, 58),
+		Parent = frame,
+	})
+	release.Activated:Connect(function()
+		if confirmUid == row.uid then
+			confirmUid = nil
+			releaseEvent:FireServer(row.uid)
+		else
+			confirmUid = row.uid -- ask once more: releasing can't be undone
+			release.Text = "Sure?"
+			release.BackgroundColor3 = RELEASE_RED
+		end
+	end)
+	return toggle
+end
+
+function CompanionPanel.refresh()
+	if not gui then
+		return
+	end
+	for _, child in list:GetChildren() do
+		if child:IsA("Frame") then
+			child:Destroy()
+		end
+	end
+	table.clear(statusLabels)
+	local outCount = 0
+	local first: GuiObject? = nil
+	for order, row in roster do
+		if row.active then
+			outCount += 1
+		end
+		local button = addRow(row, order)
+		first = first or button
+	end
+	header.Text = `Companions · {outCount} / {limit} out · {#roster} / {stableSize} owned`
+	empty.Visible = #roster == 0
+	-- Keep controller selection inside the panel after rebuilding it.
+	if panel.Visible and usingGamepad() then
+		local selected = GuiService.SelectedObject
+		if not selected or not selected:IsDescendantOf(gui) then
+			GuiService.SelectedObject = first
+		end
+	end
+end
+
+-- The server's list: every companion the player owns, how many can be out, and how many can be owned.
+function CompanionPanel.setRoster(rows: { Row }, newLimit: number, newStableSize: number)
+	roster = rows
+	limit = newLimit
+	stableSize = newStableSize
+	receivedAt = os.clock()
+	if confirmUid then
+		local still = false
+		for _, row in rows do
+			if row.uid == confirmUid then
+				still = true
+			end
+		end
+		if not still then
+			confirmUid = nil
+		end
+	end
+	CompanionPanel.refresh()
+end
+
+function CompanionPanel.close()
+	if not gui then
+		return
+	end
+	panel.Visible = false
+	confirmUid = nil
+	local selected = GuiService.SelectedObject
+	if selected and selected:IsDescendantOf(gui) then
+		GuiService.SelectedObject = nil
+	end
+end
+
+function CompanionPanel.toggle()
+	if panel.Visible then
+		CompanionPanel.close()
+	elseif canOpen() then
+		if CompanionPanel.onOpen then
+			CompanionPanel.onOpen()
+		end
+		panel.Visible = true
+		CompanionPanel.refresh()
+		-- Knock-out timers count down while the panel is open.
+		task.spawn(function()
+			while panel.Visible do
+				task.wait(1)
+				for _, row in roster do
+					local label = statusLabels[row.uid]
+					if label and label.Parent then
+						label.Text = statusText(row)
+					end
+				end
+			end
+		end)
+	end
+end
+
+-- `allowed` says whether the panel may open now (not during dialogue or class select).
+function CompanionPanel.init(parent: Instance, allowed: () -> boolean)
+	canOpen = allowed
+	gui = UI.make("ScreenGui", {
+		Name = "Companions",
+		ResetOnSpawn = false,
+		DisplayOrder = 8,
+		ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	})
+	panel = UI.panel({
+		Name = "Panel",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(460, 380),
+		Visible = false,
+		Parent = gui,
+	})
+	UI.padding(14).Parent = panel
+	header = UI.label("Companions", 18, UI.GOLD, true)
+	header.Size = UDim2.new(1, -90, 0, 24)
+	header.Parent = panel
+	local closeButton = UI.button("Close", {
+		Name = "Close",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, 0, 0, -2),
+		Size = UDim2.fromOffset(80, 28),
+		TextSize = 14,
+		Parent = panel,
+	})
+	closeButton.Activated:Connect(CompanionPanel.close)
+	list = UI.make("Frame", {
+		Name = "List",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(0, 36),
+		Size = UDim2.new(1, 0, 1, -36),
+		Parent = panel,
+	}, {
+		UI.make("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }),
+	})
+	empty = UI.label("No companions yet. Carry Meat to a fox in the south meadow and feed it (F) to earn its trust. Beast Tamers can also weaken a wolf or boar and use Tame Beast.", 14, UI.MUTED)
+	empty.TextWrapped = true
+	empty.TextYAlignment = Enum.TextYAlignment.Top
+	empty.Position = UDim2.fromOffset(0, 40)
+	empty.Size = UDim2.new(1, 0, 0, 80)
+	empty.Parent = panel
+
+	ContextActionService:BindAction("MythboundCompanions", function(_, state)
+		if state == Enum.UserInputState.Begin then
+			CompanionPanel.toggle()
+		end
+		return Enum.ContextActionResult.Pass
+	end, true, Enum.KeyCode.P, Enum.KeyCode.DPadLeft)
+	pcall(function()
+		ContextActionService:SetTitle("MythboundCompanions", "Pets")
+		ContextActionService:SetPosition("MythboundCompanions", UDim2.new(1, -300, 1, -230))
+	end)
+
+	CompanionPanel.refresh()
+	gui.Parent = parent
+end
+
+return CompanionPanel
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000022"><Properties><string name="Name">Controls</string><ProtectedString name="Source"><![CDATA[-- Player input: attack, dash, lock-on, first person, mouse-look and the controls panel.
 --
 -- Mouse-look (X) locks the mouse to the middle of the screen so moving it turns the camera,
 -- like Roblox's Shift Lock but without needing it switched on in Roblox's settings. It is for
@@ -4415,7 +6253,7 @@ function Controls.start(isBlocked: () -> boolean)
 end
 
 return Controls
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX0000001F"><Properties><string name="Name">Effects</string><ProtectedString name="Source"><![CDATA[-- Visual effects drawn on each player's own screen: damage numbers, sword swings,
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">Effects</string><ProtectedString name="Source"><![CDATA[-- Visual effects drawn on each player's own screen: damage numbers, sword swings,
 -- bolts and arrows, and hit sparks. The server decides what happens; these only show it.
 
 local Debris = game:GetService("Debris")
@@ -4650,6 +6488,10 @@ function Effects.bolt(start: Vector3, velocity: Vector3, color: Color3, lifetime
 	if shooter then
 		table.insert(exclude, shooter)
 	end
+	local companions = workspace:FindFirstChild("Companions")
+	if companions then
+		table.insert(exclude, companions) -- bolts pass through companions, as on the server
+	end
 	params.FilterDescendantsInstances = exclude
 
 	local position = start
@@ -4673,8 +6515,10 @@ function Effects.bolt(start: Vector3, velocity: Vector3, color: Color3, lifetime
 end
 
 return Effects
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000020"><Properties><string name="Name">HUD</string><ProtectedString name="Source"><![CDATA[-- In-game interface: health, cooldowns, target frame, dialogue, controls panel,
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">HUD</string><ProtectedString name="Source"><![CDATA[-- In-game interface: health, cooldowns, target frame, dialogue, controls panel,
 -- toasts, the area banner, the hurt flash, the first-person crosshair and the death screen.
+-- Also the health chips for your companions (read from the replicated models in
+-- workspace.Companions) and the trust meter shown while you feed a creature.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -4695,8 +6539,8 @@ local CONTROLS = table.concat({
 	"<b>Look</b>  X mouse-look on/off · arrow keys · right mouse · right stick",
 	"<b>Attack</b>  click or J · right trigger      <b>Skills</b>  Q · L1   E · R1",
 	"<b>Jump</b>  Space · A      <b>Dash</b>  C · B      <b>Bag</b>  Tab · D-pad up",
-	"<b>Potion</b>  H · D-pad down",
-	"<b>Talk</b>  F · Y      <b>Lock on</b>  T · R3",
+	"<b>Potion</b>  H · D-pad down      <b>Companions</b>  P · D-pad left",
+	"<b>Talk, gather, feed</b>  F · Y      <b>Lock on</b>  T · R3",
 	"<b>Zoom</b>  scroll or I / O      <b>First person</b>  V · L3",
 	"<b>This panel</b>  F1",
 }, "\n")
@@ -4725,6 +6569,16 @@ local banner: TextLabel
 local vignette: Frame
 local crosshair: Frame
 local deathScreen: Frame
+local trustPanel: Frame
+local trustTitle: TextLabel
+local trustFill: Frame
+local trustHint: TextLabel
+local companionList: Frame
+
+type CompanionChip = { back: Frame, fill: Frame, label: TextLabel }
+local companionChips: { [Model]: CompanionChip } = {}
+local companionTimer = 0
+local COMPANION_GREEN = Color3.fromRGB(95, 175, 95)
 
 local dialogueLines: { string } = {}
 local dialogueIndex = 0
@@ -4753,6 +6607,55 @@ local function refreshMana()
 	local mana = (player:GetAttribute("Mana") :: number?) or 0
 	local maxMana = (player:GetAttribute("MaxMana") :: number?) or 1
 	manaFill.Size = UDim2.fromScale(math.clamp(mana / math.max(maxMana, 1), 0, 1), 1)
+end
+
+-- One small health bar per companion of yours that is out, under the status panel.
+local function refreshCompanions()
+	local seen: { [Model]: boolean } = {}
+	local folder = workspace:FindFirstChild("Companions")
+	if folder then
+		for _, model in folder:GetChildren() do
+			local humanoid = model:FindFirstChildOfClass("Humanoid")
+			if model:IsA("Model") and humanoid and model:GetAttribute("OwnerId") == player.UserId then
+				seen[model] = true
+				local chip = companionChips[model]
+				if not chip then
+					local back, fill = UI.bar(COMPANION_GREEN, 18)
+					back.Name = "Companion"
+					back.Parent = companionList
+					local label = UI.label("", 12, UI.INK, true)
+					label.TextXAlignment = Enum.TextXAlignment.Center
+					label.Size = UDim2.fromScale(1, 1)
+					label.ZIndex = 3
+					label.Parent = back
+					chip = { back = back, fill = fill, label = label }
+					companionChips[model] = chip
+				end
+				local knocked = model:GetAttribute("KnockedOut") == true
+				local name = (model:GetAttribute("CompanionName") :: string?) or model.Name
+				chip.label.Text = if knocked then `{name} · knocked out` else name
+				chip.fill.Size = UDim2.fromScale(if knocked then 0 else math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1), 1)
+			end
+		end
+	end
+	for model, chip in companionChips do
+		if not seen[model] then
+			chip.back:Destroy()
+			companionChips[model] = nil
+		end
+	end
+end
+
+-- The trust meter, shown while you feed a creature. `trust` is 0-1.
+function HUD.setTrust(name: string, trust: number, feedsLeft: number)
+	trustTitle.Text = `{name} · trust`
+	trustFill.Size = UDim2.fromScale(math.clamp(trust, 0, 1), 1)
+	trustHint.Text = `Stay calm and feed it again ({feedsLeft} more). Don't attack, dash, jump or walk off.`
+	trustPanel.Visible = true
+end
+
+function HUD.hideTrust()
+	trustPanel.Visible = false
 end
 
 -- 0 = just used, 1 = ready.
@@ -4881,6 +6784,11 @@ function HUD.update(dt: number)
 	controls.Visible = controlsOpen and not dialogue.Visible
 	controlsHint.Visible = not controls.Visible and not dialogue.Visible
 	vignette.BackgroundTransparency = math.min(1, vignette.BackgroundTransparency + dt * 1.5)
+	companionTimer -= dt
+	if companionTimer <= 0 then
+		companionTimer = 0.2
+		refreshCompanions()
+	end
 end
 
 local function onHealth(health: number, maxHealth: number)
@@ -4984,6 +6892,37 @@ function HUD.init()
 		player:GetAttributeChangedSignal(name):Connect(refreshProgress)
 	end
 	refreshProgress()
+
+	-- Companion health chips, under the status panel.
+	companionList = UI.make("Frame", {
+		Name = "Companions",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(16, 154),
+		Size = UDim2.fromOffset(280, 90),
+		Parent = gui,
+	}, {
+		UI.make("UIListLayout", { Padding = UDim.new(0, 4) }),
+	})
+
+	-- Trust meter, bottom centre, while feeding a creature.
+	trustPanel = UI.panel({
+		Name = "TrustMeter",
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -16),
+		Size = UDim2.fromOffset(420, 72),
+		Visible = false,
+		Parent = gui,
+	})
+	UI.padding(10).Parent = trustPanel
+	trustTitle = UI.label("", 15, UI.GOLD, true)
+	trustTitle.Parent = trustPanel
+	local trustBack
+	trustBack, trustFill = UI.bar(Color3.fromRGB(240, 150, 70), 14)
+	trustBack.Position = UDim2.fromOffset(0, 24)
+	trustBack.Parent = trustPanel
+	trustHint = UI.label("", 12, UI.MUTED)
+	trustHint.Position = UDim2.fromOffset(0, 42)
+	trustHint.Parent = trustPanel
 
 	local change = UI.button("Change class", {
 		Name = "ChangeClass",
@@ -5125,7 +7064,7 @@ function HUD.init()
 end
 
 return HUD
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000021"><Properties><string name="Name">InventoryUI</string><ProtectedString name="Source"><![CDATA[-- The bag (Tab, controller D-pad up) and the workbench panel (opened by the workbench prompt).
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000025"><Properties><string name="Name">InventoryUI</string><ProtectedString name="Source"><![CDATA[-- The bag (Tab, controller D-pad up) and the workbench panel (opened by the workbench prompt).
 -- Counts come from the server (Inventory event); buttons only send requests (UseItem, Craft).
 -- H (controller D-pad down) drinks a healing potion. Works with mouse, controller and touch.
 
@@ -5159,6 +7098,9 @@ local selectedItem: string? = nil
 local canOpen: () -> boolean = function()
 	return true
 end
+
+-- Called when the bag or the workbench opens, so other panels can close.
+InventoryUI.onOpen = nil :: (() -> ())?
 
 function InventoryUI.isOpen(): boolean
 	return gui ~= nil and (bagPanel.Visible or craftPanel.Visible)
@@ -5311,6 +7253,9 @@ function InventoryUI.toggleBag()
 	if bagPanel.Visible then
 		close()
 	elseif canOpen() then
+		if InventoryUI.onOpen then
+			InventoryUI.onOpen()
+		end
 		bagPanel.Visible = true
 		InventoryUI.refresh()
 	end
@@ -5320,6 +7265,9 @@ end
 function InventoryUI.openCrafting()
 	if not canOpen() then
 		return
+	end
+	if InventoryUI.onOpen then
+		InventoryUI.onOpen()
 	end
 	bagPanel.Visible = true
 	craftPanel.Visible = true
@@ -5449,7 +7397,7 @@ function InventoryUI.close()
 end
 
 return InventoryUI
-]]></ProtectedString></Properties></Item><Item class="LocalScript" referent="RBX00000022"><Properties><string name="Name">Main</string><ProtectedString name="Source"><![CDATA[-- Client entry point: class select, HUD, controls and effects.
+]]></ProtectedString></Properties></Item><Item class="LocalScript" referent="RBX00000026"><Properties><string name="Name">Main</string><ProtectedString name="Source"><![CDATA[-- Client entry point: class select, HUD, controls, effects, the bag and the companion panel.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -5457,6 +7405,7 @@ local StarterGui = game:GetService("StarterGui")
 
 local Net = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Net"))
 local ClassSelect = require(script.Parent:WaitForChild("ClassSelect"))
+local CompanionPanel = require(script.Parent:WaitForChild("CompanionPanel"))
 local Controls = require(script.Parent:WaitForChild("Controls"))
 local Effects = require(script.Parent:WaitForChild("Effects"))
 local HUD = require(script.Parent:WaitForChild("HUD"))
@@ -5484,6 +7433,12 @@ QuestTracker.init(HUD.getGui())
 InventoryUI.init(player:WaitForChild("PlayerGui"), function()
 	return player.Character ~= nil and not HUD.isDialogueOpen() and not ClassSelect.isOpen()
 end)
+CompanionPanel.init(player:WaitForChild("PlayerGui"), function()
+	return player.Character ~= nil and not HUD.isDialogueOpen() and not ClassSelect.isOpen()
+end)
+-- Only one panel at a time: opening the bag closes the companion panel and the other way round.
+CompanionPanel.onOpen = InventoryUI.close
+InventoryUI.onOpen = CompanionPanel.close
 HUD.onChangeClass = function()
 	ClassSelect.open()
 end
@@ -5497,12 +7452,14 @@ ClassSelect.onToggle = function(open: boolean)
 	classScreenOpen = open
 	if open then
 		InventoryUI.close()
+		CompanionPanel.close()
+		HUD.hideTrust()
 	end
 	refreshHUD()
 end
 
 Controls.start(function()
-	return HUD.isDialogueOpen() or ClassSelect.isOpen() or InventoryUI.isOpen()
+	return HUD.isDialogueOpen() or ClassSelect.isOpen() or InventoryUI.isOpen() or CompanionPanel.isOpen()
 end)
 
 local firstSpawn = true
@@ -5547,6 +7504,8 @@ Net.event("Effect").OnClientEvent:Connect(function(kind: string, ...)
 		Effects.bolt(...)
 	elseif kind == "burst" then
 		Effects.burst(...)
+	elseif kind == "spark" then
+		Effects.spark(...)
 	end
 end)
 
@@ -5595,6 +7554,27 @@ Net.event("DropTaken").OnClientEvent:Connect(function(id: number)
 	Effects.removeDrop(id)
 end)
 
+Net.event("Companions").OnClientEvent:Connect(function(rows, limit: number, stableSize: number)
+	CompanionPanel.setRoster(rows, limit, stableSize)
+end)
+
+-- The trust meter while feeding a creature: "progress" (detail = feeds left), "tamed"
+-- (detail = the creature's name) or "failed" (detail = why, or "" to say nothing).
+Net.event("Taming").OnClientEvent:Connect(function(model: Model?, trust: number, state: string, detail: any)
+	if state == "progress" then
+		HUD.setTrust(if model then model.Name else "Creature", trust, detail)
+	elseif state == "tamed" then
+		HUD.hideTrust()
+		HUD.banner(`{detail} tamed!`)
+		HUD.toast(`The {string.lower(detail)} will follow you and fight for you`)
+	else
+		HUD.hideTrust()
+		if typeof(detail) == "string" and detail ~= "" then
+			HUD.toast(detail)
+		end
+	end
+end)
+
 Net.event("QuestUpdate").OnClientEvent:Connect(function(quests)
 	QuestTracker.update(quests)
 end)
@@ -5610,7 +7590,7 @@ end)
 
 -- First visit: choose a class. The world must exist before the server will spawn us.
 ClassSelect.open()
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000023"><Properties><string name="Name">QuestTracker</string><ProtectedString name="Source"><![CDATA[-- The quest tracker (top right) and the "!" / "?" markers over quest givers. The server sends
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000027"><Properties><string name="Name">QuestTracker</string><ProtectedString name="Source"><![CDATA[-- The quest tracker (top right) and the "!" / "?" markers over quest givers. The server sends
 -- this player's quests through QuestUpdate; markers exist only on this player's screen, so in
 -- co-op each player sees their own.
 
@@ -5754,7 +7734,7 @@ function QuestTracker.init(parent: ScreenGui)
 end
 
 return QuestTracker
-]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000024"><Properties><string name="Name">UI</string><ProtectedString name="Source"><![CDATA[-- Small helpers and the shared look for all interface pieces.
+]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000028"><Properties><string name="Name">UI</string><ProtectedString name="Source"><![CDATA[-- Small helpers and the shared look for all interface pieces.
 
 local UI = {}
 
@@ -5878,4 +7858,4 @@ function UI.button(text: string, props: { [string]: any }?): TextButton
 end
 
 return UI
-]]></ProtectedString></Properties></Item></Item></Item></Item><Item class="Players" referent="RBX00000028"><Properties><string name="Name">Players</string><bool name="CharacterAutoLoads">false</bool><float name="RespawnTime">3</float></Properties></Item></roblox>
+]]></ProtectedString></Properties></Item></Item></Item></Item><Item class="Players" referent="RBX0000002C"><Properties><string name="Name">Players</string><bool name="CharacterAutoLoads">false</bool><float name="RespawnTime">3</float></Properties></Item></roblox>

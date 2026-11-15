@@ -2,7 +2,7 @@
 
 A free 3D fantasy RPG on Roblox. Choose a class, choose your path and tame the mythical creatures you meet, from a fox in the meadows to a dragon you can ride. Play with up to 8 friends on PC (phones later).
 
-**Status:** playable in Roblox Studio. Hearthmoor, the five classes with two skills each, combat, wolves and boars, Elder Maren's first quest, XP and levels, saving, and items with gathering and crafting (roadmap Slices 0–3). Next: taming. The earlier Godot version of Phase 1 is on the `phase-1` branch.
+**Status:** playable in Roblox Studio. Hearthmoor, the five classes with two skills each, combat, wolves and boars, Elder Maren's first quest, XP and levels, saving, and items with gathering and crafting, and taming foxes (and, for Beast Tamers, wolves and boars) as companions (roadmap Slices 0–4). Next: the Whispering Woods. The earlier Godot version of Phase 1 is on the `phase-1` branch.
 
 ## Play it in Roblox Studio
 
@@ -26,6 +26,7 @@ If anything breaks, the **Output** window (View > Output) shows the error and th
 | Skills | Q / E | L1 / R1 |
 | Bag (inventory, crafting) | Tab | D-pad up |
 | Healing potion | H | D-pad down |
+| Companions | P | D-pad left |
 | Zoom | Scroll, or I / O | |
 | First person | V | L3 |
 | Controls panel | F1 | |

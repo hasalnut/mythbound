@@ -72,13 +72,13 @@ Done when: you can hunt, gather, craft a cookie and a potion, drink the potion, 
 
 Goal: the game's signature feature, end to end, with the Fox.
 
-- [ ] Foxes in the meadow (passive; they flee).
-- [ ] Feed Meat to a fox (prompt) to fill a trust meter; it fails if you attack or move suddenly.
-- [ ] A tamed fox follows you, fights your target, is knocked out instead of killed, and recovers after 30 seconds.
-- [ ] Companion limits (1, or 3 for the Beast Tamer) and the Beast Tamer's Tame Beast skill on weakened wolves and boars.
-- [ ] Companions are saved and come back when you rejoin; a simple companion panel lets you choose who's out.
+- [x] Foxes in the meadow (passive; they flee). Two groups of 3 in the south meadow; a player carrying Meat can walk up to them.
+- [x] Feed Meat to a fox (prompt) to fill a trust meter (3 feeds); it fails if you attack, dash, use a skill, jump or step away.
+- [x] A tamed fox follows you, fights your target, is knocked out instead of killed, and recovers after 30 seconds.
+- [x] Companion limits (1, or 3 for the Beast Tamer) and the Beast Tamer's Tame Beast skill on weakened wolves and boars. Call of the Wild summons a short-lived Spirit Wolf.
+- [x] Companions are saved and come back when you rejoin; a simple companion panel (P, controller D-pad left) lets you choose who's out.
 
-Done when: two players each tame a fox, fight together with them, and still have them after rejoining.
+Done when: two players each tame a fox, fight together with them, and still have them after rejoining. Done 15 November (solo and 2-player co-op). The class taming bonuses (CLAUDE.md > Taming) are not in yet.
 
 ## Slice 5: Whispering Woods and the Fairy Glade (grey, then good)
 

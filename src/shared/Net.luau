@@ -7,13 +7,20 @@
 --         server -> client Inventory(counts), OpenCrafting(), DropSpawned(id, itemId, count, position), DropTaken(id)
 -- Server -> client:  DamageNumber(model, position, amount, kind, attacker?), Effect(kind, ...),
 --                    Dialogue(speaker, lines), Toast(text), QuestUpdate(quests), LevelUp(player, level)
+-- Companions:  client -> server CompanionSetActive(uid, active), CompanionRelease(uid)
+--              server -> client Companions(list, limit, stableSize) where each list entry is
+--                { uid, id, name, active, allowed, knockedOut (seconds left) }
+--              server -> client Taming(creatureModel?, trust 0-1, state, detail): state is
+--                "progress" (detail = feeds left), "tamed" (detail = name) or "failed" (detail = why)
+--              Feeding itself is a ProximityPrompt, which the server hears directly.
 -- Level, XP, XPNext and SavedClass travel as Player attributes, not events.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local NAMES = { "ChooseClass", "Attack", "Dash", "DamageNumber", "Effect", "Dialogue", "Toast", "QuestUpdate", "LevelUp", "UseSkill", "SkillUsed",
-	"Inventory", "UseItem", "Craft", "OpenCrafting", "DropSpawned", "DropTaken" }
+	"Inventory", "UseItem", "Craft", "OpenCrafting", "DropSpawned", "DropTaken",
+	"Companions", "Taming", "CompanionSetActive", "CompanionRelease" }
 
 local Net = {}
 

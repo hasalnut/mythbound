@@ -33,6 +33,9 @@ local canOpen: () -> boolean = function()
 	return true
 end
 
+-- Called when the bag or the workbench opens, so other panels can close.
+InventoryUI.onOpen = nil :: (() -> ())?
+
 function InventoryUI.isOpen(): boolean
 	return gui ~= nil and (bagPanel.Visible or craftPanel.Visible)
 end
@@ -184,6 +187,9 @@ function InventoryUI.toggleBag()
 	if bagPanel.Visible then
 		close()
 	elseif canOpen() then
+		if InventoryUI.onOpen then
+			InventoryUI.onOpen()
+		end
 		bagPanel.Visible = true
 		InventoryUI.refresh()
 	end
@@ -193,6 +199,9 @@ end
 function InventoryUI.openCrafting()
 	if not canOpen() then
 		return
+	end
+	if InventoryUI.onOpen then
+		InventoryUI.onOpen()
 	end
 	bagPanel.Visible = true
 	craftPanel.Visible = true

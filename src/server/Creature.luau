@@ -5,6 +5,12 @@
 -- In co-op a chasing creature switches to another player who is clearly closer, and when its
 -- target dies a hostile creature turns on whoever else is near instead of going home.
 --
+-- Passive creatures (foxes) never fight: Wander -> (a player comes close, or something sudden
+-- happens nearby) -> Flee -> Return. A player carrying food the creature likes doesn't scare it
+-- (the calm check, set by Taming). While it is being fed it stands still (Held).
+-- A creature that is tamed leaves through Creature.remove: no XP, loot or quest credit.
+-- A companion's bite counts for its owner, and can bring the creature onto the companion.
+--
 -- The body comes from ServerStorage.Assets.<id> if a replacement model is there (see Assets.luau),
 -- otherwise it is built from grey parts.
 
@@ -34,10 +40,18 @@ local SETTLE_TIME = 1.5 -- new creatures are held still this long: freshly made 
 -- before its collision is solid, and anything dropped on it straight away falls through
 local FALLEN_RESPAWN = 3 -- seconds before a creature that fell out of the world is replaced
 local MAX_SPAWN_SLOPE = 2.5 -- studs of ground height difference allowed under a new creature
+local RESPAWN_CLEARANCE = 60 -- creatures don't (re)appear this close to a player (wolves notice at 55)
+local RESPAWN_RETRY = 2 -- seconds before trying again when players are standing on the spawn area
+local FLEE_STEP = 20 -- how far ahead a fleeing creature aims each think
+local FLEE_SAFE = 1.6 -- it keeps running until players are this many times its flee range away
+local FLEE_TURNS = { 0, 50, -50, 100, -100, 150, -150 } -- degrees to try when the way ahead is blocked
+local FLEE_MAX_RISE = 5 -- studs of climb or drop over one flee step that count as blocked (hills, the pond)
 
 local all: { any } = {}
 local byModel: { [Model]: any } = {}
 local defeatListeners: { (CreatureData.CreatureInfo, { Player }, Vector3) -> () } = {}
+local spawnListeners: { (any) -> () } = {}
+local calmCheck: ((any, Player) -> boolean)? = nil
 local folder: Folder? = nil
 
 local function getFolder(): Folder
@@ -96,7 +110,7 @@ local function buildGreyBody(data: CreatureData.CreatureInfo, position: Vector3)
 		add("Eye", Vector3.new(0.22 * s, 0.22 * s, 0.1 * s), Vector3.new(side * 0.42 * s, 1.0 * s, front - 1.42 * s), Color3.fromRGB(25, 20, 20))
 		add("Leg", Vector3.new(0.5 * s, legLength, 0.5 * s), Vector3.new(side * bodyWidth * 0.32, -bodyHeight / 2 - legLength / 2 + 0.1, front * 0.7), data.color)
 		add("Leg", Vector3.new(0.5 * s, legLength, 0.5 * s), Vector3.new(side * bodyWidth * 0.32, -bodyHeight / 2 - legLength / 2 + 0.1, -front * 0.7), data.color)
-		if data.id == "wolf" then
+		if data.id == "wolf" or data.id == "fox" then
 			add("Ear", Vector3.new(0.4 * s, 0.7 * s, 0.25 * s), Vector3.new(side * 0.45 * s, 1.75 * s, front - 0.4 * s), data.color)
 		elseif data.id == "boar" then
 			add("Tusk", Vector3.new(0.15 * s, 0.45 * s, 0.15 * s), Vector3.new(side * 0.42 * s, 0.25 * s, front - 2.1 * s), data.accent)
@@ -104,6 +118,12 @@ local function buildGreyBody(data: CreatureData.CreatureInfo, position: Vector3)
 	end
 	if data.id == "wolf" then
 		add("Tail", Vector3.new(0.45 * s, 0.45 * s, 1.8 * s), Vector3.new(0, 0.35 * s, -front + 0.7 * s), data.accent, CFrame.Angles(math.rad(25), 0, 0))
+		add("Chest", Vector3.new(bodyWidth * 0.9, bodyHeight * 0.7, 0.3 * s), Vector3.new(0, -0.1 * s, front - 0.05), data.accent)
+	elseif data.id == "fox" then
+		-- A bushy tail held up, with a pale tip.
+		local lift = CFrame.Angles(math.rad(-25), 0, 0)
+		add("Tail", Vector3.new(0.75 * s, 0.75 * s, 2.2 * s), Vector3.new(0, 0.5 * s, -front + 0.9 * s), data.color, lift)
+		add("TailTip", Vector3.new(0.65 * s, 0.65 * s, 0.8 * s), Vector3.new(0, 1.1 * s, -front + 2.2 * s), data.accent, lift)
 		add("Chest", Vector3.new(bodyWidth * 0.9, bodyHeight * 0.7, 0.3 * s), Vector3.new(0, -0.1 * s, front - 0.05), data.accent)
 	else
 		add("Tail", Vector3.new(0.2 * s, 0.2 * s, 0.6 * s), Vector3.new(0, 0.4 * s, -front + 0.25 * s), data.color)
@@ -149,8 +169,11 @@ local function buildFromAsset(data: CreatureData.CreatureInfo, position: Vector3
 	return model, humanoid, root, math.max(size.X, size.Z) * 0.45, top + 0.5
 end
 
--- Builds a creature: the replacement model if there is one, otherwise the grey body.
-local function buildModel(data: CreatureData.CreatureInfo, position: Vector3): (Model, Humanoid, BasePart)
+-- Builds a creature's body under `parent`: the replacement model if there is one, otherwise the
+-- grey body. `wild` ones are tagged Damageable, so players can attack and lock on to them;
+-- companions (Companions.luau) are built with `wild` false and can't be hit by players.
+-- The root starts anchored: whoever owns the body releases it once the ground is solid.
+function Creature.buildBody(data: CreatureData.CreatureInfo, position: Vector3, parent: Instance, wild: boolean): (Model, Humanoid, BasePart)
 	local model: Model, humanoid: Humanoid, root: BasePart, hitRadius: number, hitHeight: number
 	local assetModel, assetHumanoid, assetRoot, assetRadius, assetHeight = buildFromAsset(data, position)
 	if assetModel and assetHumanoid and assetRoot then
@@ -174,11 +197,13 @@ local function buildModel(data: CreatureData.CreatureInfo, position: Vector3): (
 	model:SetAttribute("CreatureId", data.id)
 	model:SetAttribute("HitRadius", hitRadius)
 	model:SetAttribute("HitHeight", hitHeight)
-	model:SetAttribute("Hostile", data.behaviour == "Hostile")
+	model:SetAttribute("Hostile", wild and data.behaviour == "Hostile")
 	model:SetAttribute("Void", data.isVoid)
-	CollectionService:AddTag(model, Config.TAG_DAMAGEABLE)
+	if wild then
+		CollectionService:AddTag(model, Config.TAG_DAMAGEABLE)
+	end
 	root.Anchored = true -- released by think() once SETTLE_TIME has passed
-	model.Parent = getFolder()
+	model.Parent = parent
 	return model, humanoid, root
 end
 
@@ -201,14 +226,18 @@ export type Creature = typeof(setmetatable(
 		settleUntil: number?,
 		stunnedUntil: number, -- Shield Slam, Frost Nova
 		tauntedUntil: number, -- Taunt: keeps its target and won't switch
-		onDespawn: ((fell: boolean) -> ())?,
+		fleeFrom: Vector3, -- what a fleeing creature is running from
+		fleeUntil: number,
+		holder: Model?, -- the character feeding it (Held)
+		onDespawn: ((reason: string) -> ())?,
 	},
 	Creature
 ))
 
--- `onDespawn(fell)` runs when the body has been removed; `fell` is true if it fell out of the world.
-function Creature.spawn(data: CreatureData.CreatureInfo, position: Vector3, onDespawn: ((fell: boolean) -> ())?): Creature
-	local model, humanoid, root = buildModel(data, position)
+-- `onDespawn(reason)` runs when the body has been removed. `reason` is "defeated", "fell" (out of
+-- the world) or "tamed".
+function Creature.spawn(data: CreatureData.CreatureInfo, position: Vector3, onDespawn: ((reason: string) -> ())?): Creature
+	local model, humanoid, root = Creature.buildBody(data, position, getFolder(), true)
 	local warning = Instance.new("Highlight")
 	warning.Name = "WindupWarning"
 	warning.FillColor = Color3.fromRGB(255, 40, 30)
@@ -236,18 +265,51 @@ function Creature.spawn(data: CreatureData.CreatureInfo, position: Vector3, onDe
 		settleUntil = os.clock() + SETTLE_TIME,
 		stunnedUntil = 0,
 		tauntedUntil = 0,
+		fleeFrom = position,
+		fleeUntil = 0,
+		holder = nil,
 		onDespawn = onDespawn,
 	}, Creature)
 
-	Combat.onHit(model, function(source)
-		self:provoke(source)
+	Combat.onHit(model, function(source, via)
+		self:provoke(source, via)
 	end)
 	humanoid.Died:Connect(function()
 		self:die()
 	end)
 	table.insert(all, self)
 	byModel[model] = self
+	for _, listener in spawnListeners do
+		task.spawn(listener, self)
+	end
 	return self
+end
+
+-- Runs `listener(creature)` for every creature spawned from now on (Taming adds feed prompts).
+function Creature.onSpawned(listener: (any) -> ())
+	table.insert(spawnListeners, listener)
+end
+
+-- `check(creature, player)` returns true when `player` doesn't scare a passive `creature`
+-- (Taming: they carry food it likes).
+function Creature.setCalmCheck(check: (any, Player) -> boolean)
+	calmCheck = check
+end
+
+-- The living wild creature closest to `position` within `radius` that `accept` says yes to.
+function Creature.nearest(position: Vector3, radius: number, accept: (any) -> boolean): Creature?
+	local best: Creature? = nil
+	local bestDistance = radius
+	for _, creature in all do
+		if creature.state ~= "Dead" then
+			local distance = (creature.root.Position - position).Magnitude
+			if distance <= bestDistance and accept(creature) then
+				best = creature
+				bestDistance = distance
+			end
+		end
+	end
+	return best
 end
 
 -- The creature object for a model, if it is one.
@@ -370,18 +432,100 @@ function Creature.alertPack(self: Creature, character: Model)
 	end
 end
 
-function Creature.provoke(self: Creature, source: Instance?)
+-- `source` is the player who gets the credit. `via` is their companion when it did the biting:
+-- the creature then goes for the companion rather than the player.
+function Creature.provoke(self: Creature, source: Instance?, via: Model?)
 	if self.state == "Dead" then
 		return
 	end
 	if source and source:IsA("Player") then
 		self.lastAttacker = source
 		self.damagers[source] = true
-		local character = source.Character
-		if character and Combat.isAlive(character) and (self.state == "Wander" or self.state == "Return") then
-			self:setTarget(character)
-			self:alertPack(character)
+		local attacker = via or source.Character
+		if not attacker or not Combat.isAlive(attacker) then
+			return
 		end
+		if self.data.behaviour == "Passive" then
+			local attackerRoot = Combat.rootOf(attacker)
+			if attackerRoot then
+				self:flee(attackerRoot.Position, 4)
+			end
+		elseif self.state == "Wander" or self.state == "Return" then
+			self:setTarget(attacker)
+			self:alertPack(attacker)
+		elseif via and self.target ~= via and (self.state == "Chase" or self.state == "Recover")
+			and os.clock() >= self.tauntedUntil and math.random() < 0.5 then
+			self.target = via -- sometimes turns on the companion that bit it
+		end
+	end
+end
+
+-- For passive creatures: the nearest player close enough to scare it, or nil. Players the calm
+-- check vouches for (they carry food it likes) and vanished Ninjas don't count.
+function Creature.nearestThreat(self: Creature, rangeScale: number?): Model?
+	local range = self.data.fleeRange
+	if not range then
+		return nil
+	end
+	local best: Model? = nil
+	local bestDistance = range * (rangeScale or 1)
+	local position = self.root.Position
+	for _, player in Players:GetPlayers() do
+		local character = player.Character
+		if character and Combat.isAlive(character) and not character:GetAttribute("Vanished") then
+			local root = Combat.rootOf(character)
+			if root then
+				local distance = (root.Position - position).Magnitude
+				if distance < bestDistance and not (calmCheck and calmCheck(self, player)) then
+					best = character
+					bestDistance = distance
+				end
+			end
+		end
+	end
+	return best
+end
+
+-- Runs away from `from` for at least `seconds`.
+function Creature.flee(self: Creature, from: Vector3, seconds: number)
+	if self.state == "Dead" then
+		return
+	end
+	self.fleeFrom = from
+	self.fleeUntil = math.max(self.fleeUntil, os.clock() + seconds)
+	self.target = nil
+	self.holder = nil
+	self.warning.Enabled = false
+	self.state = "Flee"
+end
+
+-- Something sudden happened at `position` (a dash, an attack, a skill): passive creatures
+-- within `radius` bolt, even from a player carrying food.
+function Creature.startle(position: Vector3, radius: number)
+	for _, creature in all do
+		if creature.data.behaviour == "Passive" and creature.state ~= "Dead"
+			and (creature.root.Position - position).Magnitude <= radius then
+			creature:flee(position, 3)
+		end
+	end
+end
+
+-- Stands still facing `character` while it is being fed (Taming). `unhold` lets it wander again.
+function Creature.hold(self: Creature, character: Model)
+	if self.state == "Dead" then
+		return
+	end
+	self.holder = character
+	self.target = nil
+	self.state = "Held"
+	self.humanoid:MoveTo(self.root.Position)
+end
+
+function Creature.unhold(self: Creature)
+	if self.state == "Held" then
+		self.holder = nil
+		self.state = "Wander"
+		self.timer = 1
 	end
 end
 
@@ -398,8 +542,8 @@ end
 
 function Creature.targetRoot(self: Creature): BasePart?
 	local target = self.target
-	-- A vanished Ninja can't be followed.
-	if target and Combat.isAlive(target) and not target:GetAttribute("Vanished") then
+	-- A vanished Ninja can't be followed, and a knocked-out companion is left alone.
+	if target and Combat.isAlive(target) and not target:GetAttribute("Vanished") and not target:GetAttribute("KnockedOut") then
 		return Combat.rootOf(target)
 	end
 	return nil
@@ -449,10 +593,74 @@ function Creature.think(self: Creature, dt: number)
 		return
 	end
 
-	if state == "Wander" then
+	if self.data.fleeRange and (state == "Wander" or state == "Return") then
+		local threat = self:nearestThreat()
+		local threatRoot = threat and Combat.rootOf(threat)
+		if threatRoot then
+			self:flee(threatRoot.Position, 2)
+			return
+		end
+	end
+
+	if state == "Flee" then
+		local threat = self:nearestThreat(FLEE_SAFE)
+		local threatRoot = threat and Combat.rootOf(threat)
+		if threatRoot then
+			self.fleeFrom = threatRoot.Position
+			self.fleeUntil = math.max(self.fleeUntil, now + 1)
+		end
+		if now >= self.fleeUntil then
+			-- Safe: stop and catch its breath, then wander as before.
+			self.state = "Wander"
+			self.timer = 2 + math.random() * 2
+			self.humanoid:MoveTo(position)
+			return
+		end
+		local away = Vector3.new(position.X - self.fleeFrom.X, 0, position.Z - self.fleeFrom.Z)
+		if away.Magnitude < 0.5 then
+			local angle = math.random() * math.pi * 2
+			away = Vector3.new(math.cos(angle), 0, math.sin(angle))
+		end
+		away = away.Unit
+		-- Stay inside the map, within reach of home and off steep ground (the hills around the
+		-- map slow a creature to a crawl): when the way ahead is blocked, turn and run along
+		-- the edge instead of stopping there.
+		local edge = Config.MAP_HALF - 20
+		local goal = position + away * FLEE_STEP
+		local groundHere = Build.groundY(position.X, position.Z)
+		for _, degrees in FLEE_TURNS do
+			local direction = CFrame.Angles(0, math.rad(degrees), 0):VectorToWorldSpace(away)
+			local candidate = position + direction * FLEE_STEP
+			if math.abs(candidate.X) <= edge and math.abs(candidate.Z) <= edge
+				and flatDistance(candidate, self.home) <= self.data.leash
+				and math.abs(Build.groundY(candidate.X, candidate.Z) - groundHere) <= FLEE_MAX_RISE then
+				goal = candidate
+				break
+			end
+		end
+		self.humanoid.WalkSpeed = self.data.fleeSpeed or self.data.walkSpeed
+		self.humanoid:MoveTo(goal)
+	elseif state == "Held" then
+		local holder = self.holder
+		local holderRoot = if holder and Combat.isAlive(holder) then Combat.rootOf(holder) else nil
+		if not holderRoot then
+			self:unhold()
+			return
+		end
+		self.humanoid:MoveTo(position)
+		self:faceTowards(holderRoot.Position)
+	elseif state == "Wander" then
 		self:lookForTarget()
 		if self.state ~= "Wander" then
 			return
+		end
+		if self.data.behaviour == "Passive" and self.humanoid.Health < self.humanoid.MaxHealth then
+			-- Passive creatures don't walk home to heal (that could lead them back to whoever
+			-- scared them); they recover slowly wherever they are.
+			self.humanoid.Health = math.min(self.humanoid.MaxHealth, self.humanoid.Health + self.humanoid.MaxHealth * 0.05 * dt)
+			if self.humanoid.Health >= self.humanoid.MaxHealth then
+				table.clear(self.damagers)
+			end
 		end
 		self.timer -= dt
 		if self.timer <= 0 then
@@ -575,9 +783,29 @@ function Creature.die(self: Creature, fell: boolean?)
 	task.delay(1.2, function()
 		self.model:Destroy()
 		if self.onDespawn then
-			self.onDespawn(fell == true)
+			self.onDespawn(if fell then "fell" else "defeated")
 		end
 	end)
+end
+
+-- Takes the creature out of the wild at once without a defeat: no XP, loot or quest credit.
+-- Used when it is tamed (`reason` "tamed"); its body is replaced by a companion.
+function Creature.remove(self: Creature, reason: string)
+	if self.state == "Dead" then
+		return
+	end
+	self.state = "Dead"
+	self.warning.Enabled = false
+	CollectionService:RemoveTag(self.model, Config.TAG_DAMAGEABLE)
+	local index = table.find(all, self)
+	if index then
+		table.remove(all, index)
+	end
+	byModel[self.model] = nil
+	self.model:Destroy()
+	if self.onDespawn then
+		self.onDespawn(reason)
+	end
 end
 
 -- Runs `listener(data, players, position)` whenever a creature is defeated; `players` is everyone
@@ -610,7 +838,19 @@ function Creature.start()
 	end)
 end
 
--- Keeps `count` creatures alive around `center`, replacing each one some time after it dies.
+local function playerWithin(position: Vector3, distance: number): boolean
+	for _, player in Players:GetPlayers() do
+		local character = player.Character
+		local root = character and Combat.rootOf(character)
+		if root and (root.Position - position).Magnitude < distance then
+			return true
+		end
+	end
+	return false
+end
+
+-- Keeps `count` creatures alive around `center`, replacing each one some time after it dies or
+-- is tamed. A replacement never appears beside a player: it waits until the spot is clear.
 function Creature.spawner(data: CreatureData.CreatureInfo, center: Vector3, count: number, radius: number)
 	local footprint = 2.5 * data.scale
 	local samples = { Vector2.zero, Vector2.new(footprint, 0), Vector2.new(-footprint, 0), Vector2.new(0, footprint), Vector2.new(0, -footprint) }
@@ -630,12 +870,19 @@ function Creature.spawner(data: CreatureData.CreatureInfo, center: Vector3, coun
 				high = math.max(high, y)
 			end
 			position = Vector3.new(x, high + 0.3, z)
-			if high - low <= MAX_SPAWN_SLOPE then
+			if high - low <= MAX_SPAWN_SLOPE and not playerWithin(position, RESPAWN_CLEARANCE) then
 				break
 			end
 		end
-		Creature.spawn(data, position, function(fell: boolean)
-			task.delay(if fell then FALLEN_RESPAWN else data.respawn, spawnOne)
+		if playerWithin(position, RESPAWN_CLEARANCE) then
+			task.delay(RESPAWN_RETRY, spawnOne) -- players are all over the area: wait for them to move on
+			return
+		end
+		Creature.spawn(data, position, function(reason: string)
+			local seconds = if reason == "fell" then FALLEN_RESPAWN
+				elseif reason == "tamed" then CreatureData.TAMED_RESPAWN
+				else data.respawn
+			task.delay(seconds, spawnOne)
 		end)
 	end
 	for _ = 1, count do

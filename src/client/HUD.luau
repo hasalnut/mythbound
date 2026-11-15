@@ -1,5 +1,7 @@
 -- In-game interface: health, cooldowns, target frame, dialogue, controls panel,
 -- toasts, the area banner, the hurt flash, the first-person crosshair and the death screen.
+-- Also the health chips for your companions (read from the replicated models in
+-- workspace.Companions) and the trust meter shown while you feed a creature.
 
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
@@ -20,8 +22,8 @@ local CONTROLS = table.concat({
 	"<b>Look</b>  X mouse-look on/off · arrow keys · right mouse · right stick",
 	"<b>Attack</b>  click or J · right trigger      <b>Skills</b>  Q · L1   E · R1",
 	"<b>Jump</b>  Space · A      <b>Dash</b>  C · B      <b>Bag</b>  Tab · D-pad up",
-	"<b>Potion</b>  H · D-pad down",
-	"<b>Talk</b>  F · Y      <b>Lock on</b>  T · R3",
+	"<b>Potion</b>  H · D-pad down      <b>Companions</b>  P · D-pad left",
+	"<b>Talk, gather, feed</b>  F · Y      <b>Lock on</b>  T · R3",
 	"<b>Zoom</b>  scroll or I / O      <b>First person</b>  V · L3",
 	"<b>This panel</b>  F1",
 }, "\n")
@@ -50,6 +52,16 @@ local banner: TextLabel
 local vignette: Frame
 local crosshair: Frame
 local deathScreen: Frame
+local trustPanel: Frame
+local trustTitle: TextLabel
+local trustFill: Frame
+local trustHint: TextLabel
+local companionList: Frame
+
+type CompanionChip = { back: Frame, fill: Frame, label: TextLabel }
+local companionChips: { [Model]: CompanionChip } = {}
+local companionTimer = 0
+local COMPANION_GREEN = Color3.fromRGB(95, 175, 95)
 
 local dialogueLines: { string } = {}
 local dialogueIndex = 0
@@ -78,6 +90,55 @@ local function refreshMana()
 	local mana = (player:GetAttribute("Mana") :: number?) or 0
 	local maxMana = (player:GetAttribute("MaxMana") :: number?) or 1
 	manaFill.Size = UDim2.fromScale(math.clamp(mana / math.max(maxMana, 1), 0, 1), 1)
+end
+
+-- One small health bar per companion of yours that is out, under the status panel.
+local function refreshCompanions()
+	local seen: { [Model]: boolean } = {}
+	local folder = workspace:FindFirstChild("Companions")
+	if folder then
+		for _, model in folder:GetChildren() do
+			local humanoid = model:FindFirstChildOfClass("Humanoid")
+			if model:IsA("Model") and humanoid and model:GetAttribute("OwnerId") == player.UserId then
+				seen[model] = true
+				local chip = companionChips[model]
+				if not chip then
+					local back, fill = UI.bar(COMPANION_GREEN, 18)
+					back.Name = "Companion"
+					back.Parent = companionList
+					local label = UI.label("", 12, UI.INK, true)
+					label.TextXAlignment = Enum.TextXAlignment.Center
+					label.Size = UDim2.fromScale(1, 1)
+					label.ZIndex = 3
+					label.Parent = back
+					chip = { back = back, fill = fill, label = label }
+					companionChips[model] = chip
+				end
+				local knocked = model:GetAttribute("KnockedOut") == true
+				local name = (model:GetAttribute("CompanionName") :: string?) or model.Name
+				chip.label.Text = if knocked then `{name} · knocked out` else name
+				chip.fill.Size = UDim2.fromScale(if knocked then 0 else math.clamp(humanoid.Health / math.max(humanoid.MaxHealth, 1), 0, 1), 1)
+			end
+		end
+	end
+	for model, chip in companionChips do
+		if not seen[model] then
+			chip.back:Destroy()
+			companionChips[model] = nil
+		end
+	end
+end
+
+-- The trust meter, shown while you feed a creature. `trust` is 0-1.
+function HUD.setTrust(name: string, trust: number, feedsLeft: number)
+	trustTitle.Text = `{name} · trust`
+	trustFill.Size = UDim2.fromScale(math.clamp(trust, 0, 1), 1)
+	trustHint.Text = `Stay calm and feed it again ({feedsLeft} more). Don't attack, dash, jump or walk off.`
+	trustPanel.Visible = true
+end
+
+function HUD.hideTrust()
+	trustPanel.Visible = false
 end
 
 -- 0 = just used, 1 = ready.
@@ -206,6 +267,11 @@ function HUD.update(dt: number)
 	controls.Visible = controlsOpen and not dialogue.Visible
 	controlsHint.Visible = not controls.Visible and not dialogue.Visible
 	vignette.BackgroundTransparency = math.min(1, vignette.BackgroundTransparency + dt * 1.5)
+	companionTimer -= dt
+	if companionTimer <= 0 then
+		companionTimer = 0.2
+		refreshCompanions()
+	end
 end
 
 local function onHealth(health: number, maxHealth: number)
@@ -309,6 +375,37 @@ function HUD.init()
 		player:GetAttributeChangedSignal(name):Connect(refreshProgress)
 	end
 	refreshProgress()
+
+	-- Companion health chips, under the status panel.
+	companionList = UI.make("Frame", {
+		Name = "Companions",
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(16, 154),
+		Size = UDim2.fromOffset(280, 90),
+		Parent = gui,
+	}, {
+		UI.make("UIListLayout", { Padding = UDim.new(0, 4) }),
+	})
+
+	-- Trust meter, bottom centre, while feeding a creature.
+	trustPanel = UI.panel({
+		Name = "TrustMeter",
+		AnchorPoint = Vector2.new(0.5, 1),
+		Position = UDim2.new(0.5, 0, 1, -16),
+		Size = UDim2.fromOffset(420, 72),
+		Visible = false,
+		Parent = gui,
+	})
+	UI.padding(10).Parent = trustPanel
+	trustTitle = UI.label("", 15, UI.GOLD, true)
+	trustTitle.Parent = trustPanel
+	local trustBack
+	trustBack, trustFill = UI.bar(Color3.fromRGB(240, 150, 70), 14)
+	trustBack.Position = UDim2.fromOffset(0, 24)
+	trustBack.Parent = trustPanel
+	trustHint = UI.label("", 12, UI.MUTED)
+	trustHint.Position = UDim2.fromOffset(0, 42)
+	trustHint.Parent = trustPanel
 
 	local change = UI.button("Change class", {
 		Name = "ChangeClass",

@@ -5,8 +5,9 @@ A free 3D fantasy action RPG with creature taming, built by one developer **on R
 ## Status (15 November 2026)
 
 - The place is published to Roblox (place 107679241076160) and edited in Studio; scripts changed there are copied back to `src/`.
+- Slices 1–4 are built and tested solo and in co-op. Slice 4 (taming and companions) was built with Claude Fable on 15 November.
 - Slices 1–3 (quest loop with XP, levels and saving; class skills and mana; items, inventory, gathering and crafting) are built and pass solo play tests, including leaving and rejoining. The 3-player co-op checks passed on 15 November (pack targeting, no friendly fire, shared XP, quest credit and loot, ally heals, Taunt). Still open: the friend play-test (see `docs/roadmap.md`).
-- Next is Slice 4 (taming and companions). The developer plans to use Claude Fable for it.
+- Next is Slice 5 (Whispering Woods and the Fairy Glade). It starts with a decision: the woods in the same place north of the gate, or a separate place.
 - The earlier Godot 4.7 version of Phase 1 is kept on the Git branch `phase-1` for reference. It was tested and works; it is no longer the main line.
 
 ## Where things are
@@ -22,7 +23,7 @@ A free 3D fantasy action RPG with creature taming, built by one developer **on R
 
 ## Agreed decisions
 
-Updated 15 November 2026 (progression, saving and inventory key decided; mouse-look key added).
+Updated 15 November 2026 (companions panel key; progression, saving and inventory key decided; mouse-look key added).
 
 - **Engine:** Roblox, Luau. Chosen because the developer's rule was "Godot only if it runs more efficiently on PC and phones", and with 6+ players Roblox's free servers run the world, so no player's device has to host. Trade-offs accepted: the game exists only on Roblox, there are no custom shaders, and players need a Roblox account.
 - **Players:** online co-op, **up to 8 per server** (set in Experience Settings > Places > Server Size). No player-versus-player damage. Never write code that assumes one player: loop over `Players:GetPlayers()`, keep per-player state in tables keyed by `Player`.
@@ -30,7 +31,7 @@ Updated 15 November 2026 (progression, saving and inventory key decided; mouse-l
 - **Input:** keyboard and mouse, laptop trackpad and game controller from the first build.
   - Every action needs a key or a single click; nothing may require right-drag or two mouse buttons. Roblox's Shift-lock needs each player to switch on "Shift Lock Switch" in Roblox's settings, so the game has its own mouse-look toggle (X): it locks the pointer to the centre so moving the mouse turns the camera, and pauses itself while a menu, dialogue or the bag is open.
   - The camera also turns with the left and right arrow keys or the right stick.
-  - Current bindings: attack click/J/RT, dash C/B, talk and gather F/Y (ProximityPrompt), lock-on T/middle click/R3, first person V/L3, mouse-look X, skills Q/L1 and E/R1, bag Tab/D-pad up, potion H/D-pad down, controls panel F1. G is reserved for mounts. I and O stay as Roblox's camera zoom, so the bag is on Tab only (Tab is read directly because Roblox's player list also claims it).
+  - Current bindings: attack click/J/RT, dash C/B, talk and gather F/Y (ProximityPrompt), lock-on T/middle click/R3, first person V/L3, mouse-look X, skills Q/L1 and E/R1, bag Tab/D-pad up, potion H/D-pad down, companions P/D-pad left, controls panel F1. G is reserved for mounts. I and O stay as Roblox's camera zoom, so the bag is on Tab only (Tab is read directly because Roblox's player list also claims it).
 - **Progression:** one level per player, shared by every class, capped at 20. Everyone who damaged a creature gets its full XP, quest credit and their own loot. Returning players see the class screen with their saved class picked and a "Continue journey" button.
 - **Camera:** Roblox's default third-person camera (it already avoids walls), with lock-on, a first-person toggle and mouse-look.
 - **Art:** stylised low-poly, flat colours, one palette per zone (green woods, ash-grey peaks, purple Rift). Built from parts and terrain in code for now; meshes from Blender later, swapped in through `ServerStorage/Assets`. Record any free asset in `assets/CREDITS.md` after checking its licence.
@@ -55,7 +56,7 @@ Ask before building anything outside this list.
 
 ### Classes
 
-Ninja, Tank, Mage, Priest and Beast Tamer. Stats (health, mana, attack and so on) are in `src/shared/ClassData.luau`; skills are in `src/shared/SkillData.luau` (both converted from `docs/game-data.md`). Each class has Q and E skills now; the Beast Tamer's (Tame Beast, Call of the Wild) show a "coming with taming" message until Slice 4. Planned later: 4 skills per class (unlocked at levels 1, 5, 10 and 15) plus an ultimate, and a talent tree with 2 branches per class.
+Ninja, Tank, Mage, Priest and Beast Tamer. Stats (health, mana, attack and so on) are in `src/shared/ClassData.luau`; skills are in `src/shared/SkillData.luau` (both converted from `docs/game-data.md`). Each class has Q and E skills; the Beast Tamer's are Tame Beast (Q) and Call of the Wild (E, summons a short-lived Spirit Wolf). Planned later: 4 skills per class (unlocked at levels 1, 5, 10 and 15) plus an ultimate, and a talent tree with 2 branches per class.
 
 ### Taming
 
@@ -73,13 +74,14 @@ Ninja, Tank, Mage, Priest and Beast Tamer. Stats (health, mana, attack and so on
 - Tamed creatures are never killed permanently, only knocked out.
 - Each class keeps a small taming bonus: Ninja tames skittish creatures more easily, Priest heals pets more, Tank's pets take less damage, Mage's pets gain elemental damage.
 - Mounts: Dragon (flies), Ethereal Fox (fastest; 30% of attacks pass through), Rift Runner (blink-teleports forward).
+- **How it works now (Slice 4):** numbers are in `src/shared/CompanionData.luau`, creature taming fields (`tameFood`, `tameFeeds`, `tamerOnly`, `fleeRange`) in `CreatureData`. A fox takes 3 feeds of Meat, at least 2 s apart and within 12 s of each other; attacking, dashing, using a skill, jumping or stepping 10 studs away within 30 studs makes it bolt and stay wary for 8 s. A player carrying a creature's food doesn't scare it. Tame Beast works below 50% health with a chance that rises the more health is missing. A player owns up to 6 companions. Companions use the owner's level for health and damage, their kills count for the owner (XP, quest credit, loot), they can't be hit by players, and they lie knocked out for 30 s instead of dying. A tamed wild creature's spot refills after 60 s. The class taming bonuses are not in yet.
 
 ### Creature behaviour
 
 - Wolves are hostile and hunt as a pack (`pack = true` in `CreatureData`): when one spots or is hit by a player, wolves nearby join in, each going for the player closest to itself.
 - Boars are neutral: only the boar that was hit fights back, and it stays on whoever hit it.
 - In co-op a chasing hostile creature switches to another player who is at least 12 studs closer, and when its target dies it turns on whoever else is near instead of going home. A taunted creature keeps its target; a vanished Ninja can't be followed.
-- Creatures give up when led too far from home, walk back healing, and respawn some time after dying.
+- Creatures give up when led too far from home, walk back healing, and respawn some time after dying (45 s for wolves, boars and foxes).
 
 ### Items
 
@@ -99,12 +101,13 @@ The Rift Wyrm is the final boss. Endings: seal the Rift or claim its power, plus
 
 ```
 src/shared/  -> ReplicatedStorage.Shared       Config, ClassData, CreatureData, SkillData, ItemData, QuestData,
-                                                Progression (XP/level formulas), Net (RemoteEvents)
+                                                Progression (XP/level formulas), CompanionData, Net (RemoteEvents)
 src/server/  -> ServerScriptService.Server     Main.server (entry), PlayerData (saves), Quests, Skills (mana, Q/E),
+                                                Taming (trust meter, Tame Beast), Companions (companion AI, knock-outs),
                                                 Inventory (items, gathering, crafting), Drops (per-player loot),
                                                 Assets (swappable models), Combat, Creature, Hearthmoor (world builder),
                                                 PlayerSetup (class choice, weapons), Dummy, Interactables, Build
-src/client/  -> StarterPlayerScripts.Client    Main.client (entry), ClassSelect, HUD, QuestTracker, InventoryUI,
+src/client/  -> StarterPlayerScripts.Client    Main.client (entry), ClassSelect, HUD, QuestTracker, InventoryUI, CompanionPanel,
                                                 Controls, Effects, UI
 ServerStorage/Assets (in the place only)       replacement models: Assets/Hearthmoor/<Name>, Assets/Creatures/<id>
 ```
@@ -116,14 +119,15 @@ File names: `Name.server.luau` = Script, `Name.client.luau` = LocalScript, `Name
 - **The server decides, clients ask.** Damage, health, mana, cooldown checks, AI, loot, crafting, taming and saves happen on the server. Clients send intentions through RemoteEvents in `Net.luau` (add new names to its list) and draw effects. Check every argument a client sends (`typeof`, finite numbers, ranges, cooldowns, distance to the workbench).
 - Anything that can be hit is a Model tagged `Damageable` (CollectionService) with a Humanoid and the attributes `HitRadius`, `HitHeight`, `Hostile`, `Void`, `DamageReduction`. Always deal damage through `Combat.damage`; area skills use `Combat.targetsNear`, heals use `Combat.heal`, projectiles use `Combat.fireProjectile`.
 - Game data lives in ModuleScripts under `src/shared` (like `ClassData`), not scattered through scripts.
-- Values the client shows but the server owns travel as Player attributes: `Level`, `XP`, `XPNext`, `Mana`, `MaxMana`, `SavedClass`, `DataLoaded`. Character attributes: `Vanished` (Ninja), `Taunting` (Tank).
+- Values the client shows but the server owns travel as Player attributes: `Level`, `XP`, `XPNext`, `Mana`, `MaxMana`, `SavedClass`, `DataLoaded`. Character attributes: `Vanished` (Ninja), `Taunting` (Tank). Companion models: `OwnerId`, `CompanionUid`, `CompanionName`, `State`, `KnockedOut`, `Spirit`.
+- **Companions never die:** their models carry `NeverDies` (Combat.damage stops at 1 health and they are knocked out), and the Humanoid's Dead state is switched off so a companion can always get up again.
 - **Art goes through `Assets`:** scenery is placed with `Assets.place(name, cframe, parent, buildGrey, scale?)`, and creatures use `Assets.find(id)`, so a model in `ServerStorage/Assets` replaces the grey version without code changes (see `docs/art-direction.md`).
 - **Creatures and fresh terrain:** terrain built by code isn't solid for physics straight away, so new creatures are held anchored for 1.5 s after spawning. Any creature that falls below y = -60 is removed and respawned 3 s later. Keep both when adding new creature types.
 - **Dialogue:** while a dialogue box is open, ProximityPrompts are switched off on that client, so F advances the dialogue instead of re-triggering the prompt.
 - **ScreenGuis and billboards made by code** that should survive a respawn need `ResetOnSpawn = false`.
 - Luau style: tabs, PascalCase module names, camelCase functions and variables, UPPER_CASE constants, type annotations on function parameters. Add `--!strict` to a file once it passes Script Analysis cleanly.
 - Input goes through ContextActionService with a keyboard, a controller and (where it makes sense) a touch binding for every action. Menus put GuiService selection on a button when a controller is in use.
-- Saves: `PlayerData.luau`. DataStoreService, one key per player (`player_<UserId>`), `version` field (now 2: added inventory and gifts; `migrate` fills in missing fields), `UpdateAsync`, retries, save on leave, every 3 minutes and on shutdown. Studio uses its own store (`PlayerData_Studio`) so tests never touch real saves. If a save can't be loaded, that session isn't saved, so a good save is never overwritten. Testing in Studio needs File > Experience Settings > Security > "Enable Studio Access to API Services" (on since 15 November).
+- Saves: `PlayerData.luau`. DataStoreService, one key per player (`player_<UserId>`), `version` field (now 3: 2 added inventory and gifts, 3 added companions; `migrate` fills in missing fields), `UpdateAsync`, retries, save on leave, every 3 minutes and on shutdown. Studio uses its own store (`PlayerData_Studio`) so tests never touch real saves. If a save can't be loaded, that session isn't saved, so a good save is never overwritten. Testing in Studio needs File > Experience Settings > Security > "Enable Studio Access to API Services" (on since 15 November).
 - Performance: aim for 60 fps on modest PCs, and keep phones in mind: anchor scenery, keep part counts sensible, switch off `CanQuery`/`CanCollide`/`CastShadow` on decoration, and consider StreamingEnabled when the map grows.
 - Distances are in studs: 1 stud is about 0.28 m, a character is about 5 studs tall. Prototype metres x 3.5 = studs.
 
@@ -142,7 +146,8 @@ The full plan is `docs/roadmap.md`.
 
 1. **Friend play-test:** set Server Size to 8 (File > Experience Settings > Places), invite a friend.
 2. **Controller check:** D-pad navigation on the class screen and in the bag, once a controller is available.
-3. **Slice 4: taming and companions** (planned for Claude Fable): foxes, the trust meter, companion AI, knocked out instead of killed, companion limits, the Beast Tamer's Tame Beast and Call of the Wild (currently stubs in `SkillData`), and saving companions.
+3. **Slice 5: Whispering Woods and the Fairy Glade.** First decide the zone layout (same place north of the gate with StreamingEnabled, recommended, or a separate place).
+4. Later: the class taming bonuses (Ninja, Priest, Tank, Mage).
 
 ## Workflow
 

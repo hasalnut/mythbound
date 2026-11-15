@@ -13,7 +13,9 @@ local Net = require(Shared:WaitForChild("Net"))
 local Progression = require(Shared:WaitForChild("Progression"))
 local SkillData = require(Shared:WaitForChild("SkillData"))
 local Combat = require(script.Parent:WaitForChild("Combat"))
+local Companions = require(script.Parent:WaitForChild("Companions"))
 local Creature = require(script.Parent:WaitForChild("Creature"))
+local Taming = require(script.Parent:WaitForChild("Taming"))
 
 local Skills = {}
 
@@ -77,8 +79,17 @@ local function aimAt(ctx: Context, range: number): Vector3
 	return ctx.aim
 end
 
+-- Everyone a heal reaches: player characters and companions within `radius`.
+local function alliesNear(position: Vector3, radius: number): { Model }
+	local list = Combat.playersNear(position, radius)
+	for _, model in Companions.near(position, radius) do
+		table.insert(list, model)
+	end
+	return list
+end
+
 local function healAllies(ctx: Context, radius: number, fraction: number)
-	for _, character in Combat.playersNear(ctx.root.Position, radius) do
+	for _, character in alliesNear(ctx.root.Position, radius) do
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		if humanoid then
 			Combat.heal(character, humanoid.MaxHealth * fraction)
@@ -188,7 +199,7 @@ end
 
 handlers.healing_light = function(ctx, skill)
 	local now = os.clock()
-	for _, character in Combat.playersNear(ctx.root.Position, skill.healRadius) do
+	for _, character in alliesNear(ctx.root.Position, skill.healRadius) do
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		if humanoid then
 			Combat.heal(character, humanoid.MaxHealth * skill.heal)
@@ -210,6 +221,15 @@ handlers.holy_nova = function(ctx, skill)
 	healAllies(ctx, skill.healRadius, skill.heal)
 	Combat.burst(ctx.root.Position, skill.radius, Color3.fromRGB(255, 235, 150))
 	return true
+end
+
+-- Beast Tamer. Taming.luau and Companions.luau do the work.
+handlers.tame_beast = function(ctx, skill)
+	return Taming.tameBeast(ctx.player, ctx.root.Position, skill)
+end
+
+handlers.call_of_the_wild = function(ctx, skill)
+	return Companions.callOfTheWild(ctx.player, skill)
 end
 
 local function onUseSkill(player: Player, slot: any, aim: any, locked: any)
@@ -267,6 +287,7 @@ local function onUseSkill(player: Player, slot: any, aim: any, locked: any)
 	if not handler or not handler(ctx, skill) then
 		return
 	end
+	Combat.noteAction(player, "skill") -- sudden moves startle passive creatures
 	mana[player] = (mana[player] or 0) - skill.mana
 	ready[slot] = now + skill.cooldown
 	publish(player)
