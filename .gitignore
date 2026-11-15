@@ -1,0 +1,22 @@
+# Godot 4
+.godot/
+/android/
+
+# Exported builds
+/build/
+/export/
+*.pck
+*.exe
+*.x86_64
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+*.tmp
+.vscode/settings.json
+
+# Roblox Studio
+*.rbxl.lock
+*.rbxlx.lock
+sourcemap.json
+__pycache__/
